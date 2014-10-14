@@ -2,70 +2,50 @@ package main
 
 import (
     "os"
+    "fmt"
     "log"
-    "io/ioutil"
     "runtime"
     "flag"
+    "time"
     "net/http"
+    "runtime/pprof"
     "path/filepath"
     "polaris/util"
 )
 
-const (
-    MAXFILE = 5
-)
-
 var (
-    logFileName = flag.String("log", "client.log","log file name" )
+    logFileName = flag.String("log", "client.log", "log file name" )
+    dir = flag.String("d", "", "source directory")
+    traceLevel = flag.String("level", "Info", "trace level")
+    cpuProfile = flag.String("cpuprofile", "", "write profile to file")
 )
 
 
 var ch chan http.Response 
 
-type Walker struct {
-    dirs []string
-    files []string
-}
-
-func UploadFile(path string, url string) error {
-    var headers map[string] string
-    headers = make(map[string] string)
-    headers["Authorization"] = "Bearer " + os.Getenv("TOKEN")
-    headers["Content-type"] = "text/plain"
-
-    fContent, err := ioutil.ReadFile(path)
-    if err != nil {
-        log.Fatal(err)
-    }
-    
-
-    log.Println("url: ", url)
-    for k, v := range headers {
-        log.Printf("%s: %s", k, v)
-    }
-    res, err := util.CallAPI("PUT", url, &fContent, headers)
-    
-    if  err != nil {
-        log.Fatal(err)
-    }
-    
-    log.Printf("Upload %s, Response: %s\n", filepath.Base(path), res.Status)
-    ch <- *res
-    
-    return err
-}
 
 func main() {
 
     runtime.GOMAXPROCS(runtime.NumCPU())
     flag.Parse()
-
     logFile, logErr := os.OpenFile(*logFileName, os.O_CREATE|os.O_RDWR, 0666)
     if logErr != nil {
         log.Fatal("Fail to open log file")
     }
     log.SetOutput(logFile)
-    log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+    log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
+
+    if *cpuProfile != "" {
+        f, err := os.Create(*cpuProfile)
+        if err != nil {
+            log.Fatal(err)
+        }
+        pprof.StartCPUProfile(f)
+        defer pprof.StopCPUProfile()
+    }
+    log.Printf("source directory: %s\n", *dir)
+    log.Printf("log file: %s\n", *logFileName)
+    log.Printf("log level: %s\n", *traceLevel)
 
     userId := os.Getenv("USER_ID")
     token := os.Getenv("TOKEN")
@@ -73,41 +53,59 @@ func main() {
     storageService := os.Getenv("STORAGE_SVC")
     metadataService := os.Getenv("MD_SVC")
 
+    if len(storageService) == 0 || len(token) == 0 || len(userId) == 0 {
+        fmt.Println("Service error!")
+        log.Fatal("Service error!")
+    }
+
     log.Println("user_id: ", userId)
     log.Println("clientId: ", clientId)
     log.Println("storage service: ", storageService)
     log.Println("metadata service: ", metadataService)
     log.Println("token: ", token)
 
-    dir := "/home/panzhongbin/Beta/go_source/src/polaris/"
-    walker := new(Walker)
-    filepath.Walk(dir,
+    walker := new(util.Walker)
+    err := filepath.Walk(*dir,
     func(path string, fi os.FileInfo, err error) error {
         if fi == nil {
+            fmt.Println(err)
+            log.Println(err)
             return err
         }
         if fi.IsDir() {
-            log.Printf("Found directory: %s", path)
-            walker.dirs = append(walker.dirs, path)
+            log.Printf("Found directory: %s\n", path)
+            walker.Dirs = append(walker.Dirs, path)
 
         } else {
-            log.Printf("Found Files: %s", path)
-            walker.files = append(walker.files, path)
+            log.Printf("Found Files: %s\n", path)
+            walker.Files = append(walker.Files, path)
         }
         return nil
     })
 
-    ch = make(chan http.Response, len(walker.files))
-    for _, filename := range walker.files {
-        go UploadFile(filename, storageService+"/"+userId+"/files/"+filepath.Base(filename)+"?previous=")
+    if err != nil {
+        return 
     }
+
+    ch = make(chan http.Response, len(walker.Files))
+    fmt.Printf("Preapare to upload %d files\n", len(walker.Files))
+    log.Printf("Preapare to upload %d files\n", len(walker.Files))
+    
+    t1 := time.Now()
+    for _, filename := range walker.Files {
+        go util.UploadFile(filename, storageService+"/"+userId+"/files/"+filepath.Base(filename)+"?previous=", *traceLevel, ch)
+    }
+
+    t2 := time.Now()
+    fmt.Printf("Concurrency: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()))
+    log.Printf("Concurrency: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()))
 
     i := 0
     LOOP: for {
         select {
         case <-ch:
                 i++
-                if i == len(walker.files){
+                if i == len(walker.Files){
                     break LOOP
                 }
                 
