@@ -21,8 +21,6 @@ var (
 )
 
 
-var ch chan http.Response 
-
 
 func main() {
 
@@ -43,9 +41,7 @@ func main() {
         pprof.StartCPUProfile(f)
         defer pprof.StopCPUProfile()
     }
-    log.Printf("source directory: %s\n", *dir)
-    log.Printf("log file: %s\n", *logFileName)
-    log.Printf("log level: %s\n", *traceLevel)
+    
 
     userId := os.Getenv("USER_ID")
     token := os.Getenv("TOKEN")
@@ -54,61 +50,59 @@ func main() {
     metadataService := os.Getenv("MD_SVC")
 
     if len(storageService) == 0 || len(token) == 0 || len(userId) == 0 {
-        fmt.Println("Service error!")
-        log.Fatal("Service error!")
+        fmt.Println("Fatal: Service error!")
+        log.Fatal("Fatal: Service error!")
     }
 
+    log.Printf("source directory: %s\n", *dir)
+    log.Printf("log file: %s\n", *logFileName)
+    log.Printf("log level: %s\n", *traceLevel)
     log.Println("user_id: ", userId)
     log.Println("clientId: ", clientId)
     log.Println("storage service: ", storageService)
     log.Println("metadata service: ", metadataService)
     log.Println("token: ", token)
+    log.Println("-----\n\n")
 
-    walker := new(util.Walker)
-    err := filepath.Walk(*dir,
-    func(path string, fi os.FileInfo, err error) error {
-        if fi == nil {
-            fmt.Println(err)
-            log.Println(err)
-            return err
-        }
-        if fi.IsDir() {
-            log.Printf("Found directory: %s\n", path)
-            walker.Dirs = append(walker.Dirs, path)
-
-        } else {
-            log.Printf("Found Files: %s\n", path)
-            walker.Files = append(walker.Files, path)
-        }
-        return nil
-    })
+   
+    walker, err := util.GetDirAndFileList(*dir)
 
     if err != nil {
         return 
     }
+    if *traceLevel == "debug" {
+        for _, f := range walker.Files {
+            fmt.Println(f)
+            log.Println(f)
+        }
+    }
 
-    ch = make(chan http.Response, len(walker.Files))
+    ch := make(chan http.Response, len(walker.Files))
     fmt.Printf("Preapare to upload %d files\n", len(walker.Files))
     log.Printf("Preapare to upload %d files\n", len(walker.Files))
     
     t1 := time.Now()
     for _, filename := range walker.Files {
-        go util.UploadFile(filename, storageService+"/"+userId+"/files/"+filepath.Base(filename)+"?previous=", *traceLevel, ch)
+            url := storageService + "/" + userId + "/files/" + filepath.Base(filename) + "?previous="
+            go util.Task(util.UploadFile, filename, url, *traceLevel, ch)
     }
-
     t2 := time.Now()
-    fmt.Printf("Concurrency: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()))
-    log.Printf("Concurrency: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()))
+    fmt.Printf("Concurrency: %d, Paralell: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
+    log.Printf("Concurrency: %d, Paralell: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
 
-    i := 0
-    LOOP: for {
+
+    completeCount := 0
+    for i := 0; i < len(walker.Files); i++ {
         select {
-        case <-ch:
-                i++
-                if i == len(walker.Files){
-                    break LOOP
-                }
-                
+        case r := <-ch:
+            completeCount++
+            if *traceLevel == "debug" {
+                fmt.Println(r)
+                log.Println(r)
+            }
         }
     }
+    fmt.Println(completeCount, "File Uploaded")
+    log.Println(completeCount, "File Uploaded")
+    
 }

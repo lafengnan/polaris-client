@@ -4,12 +4,14 @@ import (
     "bytes"
     "errors"
     "io"
-    "io/ioutil"
     "os"
     "fmt"
     "log"
-    "strings"
     "time"
+    "runtime"
+    "reflect"
+    "strings"
+    "io/ioutil"
     "net/http"
     "path/filepath"
 )
@@ -27,7 +29,35 @@ func (readCloser) Close() error {
     return nil
 }
 
+
+func GetDirAndFileList(path string) (Walker, error) {
+
+    walker := new(Walker)
+    err := filepath.Walk(path,
+    func(path string, fi os.FileInfo, err error) error {
+        if fi == nil {
+            fmt.Println(err)
+            log.Println(err)
+            return err
+        }
+        if fi.IsDir() {
+            //log.Printf("Found directory: %s\n", path)
+            walker.Dirs = append(walker.Dirs, path)
+
+        } else {
+            //log.Printf("Found Files: %s\n", path)
+            walker.Files = append(walker.Files, path)
+        }
+        return nil
+    })
+
+    return *walker, err
+}
+
 func CallAPI(method, url string, content *[]byte, h map[string]string) (*http.Response, error) {
+
+    _, t1 := Trace(reflect.TypeOf(CallAPI).Name(), method, url)
+    defer Un(reflect.TypeOf(CallAPI).Name(), t1, method, url)
     if len(h) % 2 == 1 {
         return nil, errors.New("syntax err: # header != # of values")
     }
@@ -85,35 +115,35 @@ func CheckHttpResponseStatusCode(resp *http.Response) error {
 }
 
 
-func Trace(s string)(string, time.Time) {
-    log.Println("START: ", s)
+func Trace(s string, args... interface{})(string, time.Time) {
+    log.Println("Task Starting: ", time.Now(), s, args)
+    fmt.Println("Task Starting: ", time.Now(), s, args)
     return s, time.Now()
 }
 
-func Un(s string, startTime time.Time) {
+func Un(s string, startTime time.Time, args... interface{}) {
     endTime := time.Now()
-    log.Println(" End:", s, "ElapsedTime in millisseconds: ", endTime.Sub(startTime))
+    log.Println("Task Ending:", endTime, s, args, "ElapsedTime: ", endTime.Sub(startTime))
+    fmt.Println("Task Ending:", endTime, s, args, "ElapsedTime: ", endTime.Sub(startTime))
 }
 
-func UploadFile(path string, url string, traceLevel string, ch chan http.Response) error {
-    if traceLevel == "debug" {
-        fmt.Println("Uploading Request start: ", time.Now())
-        log.Println("Uploading Request start: ", time.Now())
-    }
+func UploadFile(path string, url string, traceLevel string, ch chan http.Response)  error {
+
     method := "PUT"
-    log.Println("timestamp: ", time.Now())
     var headers map[string] string
     headers = make(map[string] string)
     headers["Authorization"] = "Bearer " + os.Getenv("TOKEN")
     headers["Content-type"] = "text/plain"
 
-    fmt.Printf("Starting Upload %s, %s\n", filepath.Base(path), url)
-    log.Printf("Starting Upload %s, %s\n", filepath.Base(path), url)
     fContent, err := ioutil.ReadFile(path)
     if err != nil {
         log.Fatal(err)
     }
-    
+
+    if err != nil {
+        log.Fatal(err)
+    }
+
 
     log.Printf("url: %s\nmethod: %s\n", url, method)
     if strings.ToLower(traceLevel) == "debug" {
@@ -123,6 +153,9 @@ func UploadFile(path string, url string, traceLevel string, ch chan http.Respons
         }
     }
     
+    //fmt.Printf("Starting Upload %s, %s\n", filepath.Base(path), url)
+    //log.Printf("Starting Upload %s, %s\n", filepath.Base(path), url)
+    //log.Println("Starting Execute", GetFunctionName(CallAPI), time.Now())
     res, err := CallAPI(method, url, &fContent, headers)
     
     if  err != nil {
@@ -140,10 +173,30 @@ func UploadFile(path string, url string, traceLevel string, ch chan http.Respons
     }
     
     ch <- *res
-    fmt.Printf("Finished Upload %s, Response: %s\n", filepath.Base(path), res.Status)
-    log.Printf("Finished Upload %s, Response: %s\n", filepath.Base(path), res.Status)
+    //fmt.Printf("Finished Upload %s, Response: %s\n", filepath.Base(path), res.Status)
+    //log.Printf("Finished Upload %s, Response: %s\n", filepath.Base(path), res.Status)
     
     return err
 }
+func GetFunctionName(i interface{}) string {
+    return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name() 
+}
+func Task(f func(string, string, string, chan http.Response) (error), path, url, traceLevel string, ch chan http.Response) error {
 
+    _, t1 := Trace(GetFunctionName(f), path)
+    defer Un(GetFunctionName(f), t1, path)
 
+    err := f(path, url, traceLevel, ch)
+
+    if err != nil {
+        log.Fatal(err)
+    }
+    return err
+//    if len(args) > 1 {
+//        go f.(func(...interface{}))(args)
+//    } else if len(args) == 1 {
+//        go f.(func(interface{}))(args[0])
+//    } else {
+//        go f.(func())()
+//    }
+}
