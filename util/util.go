@@ -111,6 +111,8 @@ func CheckHttpResponseStatusCode(resp *http.Response) error {
 	case 503:
 		return errors.New("Error: response == 503 service unavailable")
 	}
+    fmt.Println("Error: unexpected response status code: ", resp.StatusCode)
+    log.Fatal("Error: unexpected response status code: ", resp.StatusCode)
 	return errors.New("Error: unexpected response status code")
 }
 

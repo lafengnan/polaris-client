@@ -15,7 +15,8 @@ import (
 
 var (
     logFileName = flag.String("log", "client.log", "log file name" )
-    dir = flag.String("d", "", "source directory")
+    dir = flag.String("source", "", "source directory")
+    concurrencyNum = flag.Int("n", 1, "Concurrency number")
     traceLevel = flag.String("level", "Info", "trace level")
     cpuProfile = flag.String("cpuprofile", "", "write profile to file")
 )
@@ -82,17 +83,30 @@ func main() {
     log.Printf("Preapare to upload %d files\n", len(walker.Files))
     
     t1 := time.Now()
-    for _, filename := range walker.Files {
+    if *concurrencyNum > 1 && len(walker.Files) == 1 {
+            filename := walker.Files[0]
+            url := storageService + "/" + userId + "/files/" + filepath.Base(filename) + "?previous="
+        for j := 0; j < *concurrencyNum; j++ {
+            go util.Task(util.UploadFile, filename, url, *traceLevel, ch)
+        }
+    } else {
+        for _, filename := range walker.Files {
             url := storageService + "/" + userId + "/files/" + filepath.Base(filename) + "?previous="
             go util.Task(util.UploadFile, filename, url, *traceLevel, ch)
+        }
     }
+    
     t2 := time.Now()
     fmt.Printf("Concurrency: %d, Paralell: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
     log.Printf("Concurrency: %d, Paralell: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
 
 
     completeCount := 0
-    for i := 0; i < len(walker.Files); i++ {
+    waitNum := *concurrencyNum
+    if waitNum == 1 {
+        waitNum = len(walker.Files)
+    }
+    for i := 0; i < waitNum; i++ {
         select {
         case r := <-ch:
             completeCount++
