@@ -10,7 +10,7 @@ import (
     "net/http"
     "runtime/pprof"
     "path/filepath"
-    "polaris/util"
+    "polaris-client/util"
 )
 
 var (
