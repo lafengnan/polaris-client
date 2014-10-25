@@ -2,11 +2,17 @@
 # coding=utf-8
 
 import sys
+from optparse import OptionParser
+
+
+USAGE = """%prog <log-file> [options]
+
+""" 
 
 precise = 1e-9
 
 def getRespTime(f):
-    tv = []
+    tv = list()
     try:
         with open(f, 'r') as fh:
             l = fh.readlines()
@@ -17,11 +23,22 @@ def getRespTime(f):
         print e
 
 
+def main():
 
-if __name__ == '__main__':
+    parser = OptionParser(USAGE)
 
+    parser.add_option('-v', '--verbose', action='store_true', default=False,
+                      help='display verbose output')
 
-    f = sys.argv[1]
+    options, args = parser.parse_args()
+
+    if not len(args):
+        parser.print_help()
+        print "ERROR: specify log file or options"
+        return 1
+
+    
+    f = args[0]
     tv = getRespTime(f)
 
     bt4s = 0
@@ -54,3 +71,7 @@ if __name__ == '__main__':
     print "Time >= 500ms && < 1s count: %d, %.9f%%" % (bt500ms, 100*bt500ms/float(total))
     print "Time >= 100ms && < 500ms count: %d, %.9f%%" % (bt100ms, 100*bt100ms/float(total))
     print "Time >= 1ms && < 100ms count: %d, %.9f%%" % (bt1ms, 100*bt1ms/float(total))
+
+if __name__ == '__main__':
+
+    sys.exit(main())
