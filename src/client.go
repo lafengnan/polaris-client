@@ -10,7 +10,7 @@ import (
     "net/http"
     "runtime/pprof"
     "path/filepath"
-    "util"
+    "utils"
 )
 
 var (
@@ -73,7 +73,7 @@ func main() {
     log.Println("-----\n\n")
 
    
-    walker, err := util.GetDirAndFileList(*dirToUpload)
+    walker, err := utils.GetDirAndFileList(*dirToUpload)
 
     if err != nil {
         return 
@@ -105,12 +105,12 @@ func main() {
             filename := walker.Files[0]
             url := storageService + "/" + userId + "/files/" + filepath.Base(filename) + "?previous="
         for j := 0; j < *concurrencyNum; j++ {
-            go util.Task(util.UploadFile, filename, url, *traceLevel, ch)
+            go utils.Task(utils.UploadFile, filename, url, *traceLevel, ch)
         }
     } else {
         for _, filename := range walker.Files {
             url := storageService + "/" + userId + "/files/" + filepath.Base(filename) + "?previous="
-            go util.Task(util.UploadFile, filename, url, *traceLevel, ch)
+            go utils.Task(utils.UploadFile, filename, url, *traceLevel, ch)
         }
     }
     t2 := time.Now()
