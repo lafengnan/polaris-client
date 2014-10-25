@@ -8,12 +8,14 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+    "net/url"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
-	"time"
+    "time"
+    "github.com/belogik/goes"
 )
 
 type Walker struct {
@@ -148,10 +150,13 @@ func CheckHttpResponseStatusCode(resp *http.Response) error {
 	return errors.New("Error: unexpected response status code")
 }
 
-/*
-** Client operations will be defined here
- */
 
+/**Upload File(s) to polaris storage
+ * @param path the file(s) to upload 
+ * @param url the API uri
+ * @param traceLevel the log level
+ * @param ch the chan to transit http.Response
+ */
 func UploadFile(path string, url string, traceLevel string, ch chan http.Response) error {
 
 	method := "PUT"
@@ -197,3 +202,27 @@ func UploadFile(path string, url string, traceLevel string, ch chan http.Respons
 
 	return err
 }
+
+/**Index the metadata to Elasticsearch
+ * @esConn the connection between client and ES
+ * @d the metadata document to indexing
+ * @extraArgs extral arguments sent to ES
+ * @ch the chan for goroutine communications
+ */
+func IndexMetadata(esConn goes.Connection, d goes.Document, extraArgs url.Values, ch chan goes.Response) (err error) {
+    r, err := esConn.Index(d, extraArgs)
+    ch <- r
+    return 
+}
+
+/**Delete the metadata from ES
+ * @esConn the connection between client and ES
+ * @d the metadata document to delete from ES
+ * @extraArgs extral arguments sent to ES
+ * @ch the chan for goroutine communications
+ */
+ func DeleteMetadata(esConn goes.Connection, d goes.Document, extraArgs url.Values, ch chan goes.Response) (err error) {
+     r, err := esConn.Delete(d, extraArgs)
+     ch <- r
+     return 
+ }
