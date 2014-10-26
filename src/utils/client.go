@@ -25,6 +25,18 @@ var Commands []string  = []string {
     "DeleteDocument",
 }
 
+const (
+    WAITTING = iota
+    RUNNING
+    DONE
+    UNKOWN
+)
+
+type PolarisCommand struct {
+    Status int
+    Command string
+}
+
 type PolarisClient struct {
     ClientId string
     UserId string
@@ -32,8 +44,9 @@ type PolarisClient struct {
     StorageServiceURL string
     MetadataServiceURL string
     TraceLevel string
-    Command string
+    Command *PolarisCommand
     Logger *log.Logger
+    TaskCount int
 }
 
 type FileOps interface {
@@ -57,12 +70,12 @@ type MetadataOps interface {
  * @cmd command list to run 
  * @logger the logger fo client
  */
-func (c *PolarisClient)Init(clientId, UserId, token, stVC, mdVC, traceLevel, cmd string, logger *log.Logger) (errs []error) {
+func (c *PolarisClient)Init(clientId, UserId, token, stVC, mdVC, traceLevel string, cmd *PolarisCommand, logger *log.Logger) (errs []error) {
 
     s, t1 := Trace(GetFunctionName(c.Init))
     defer Un(s, t1)
 
-    *c = PolarisClient{clientId, UserId, token, stVC, mdVC, strings.ToLower(traceLevel), cmd, logger}
+    *c = PolarisClient{clientId, UserId, token, stVC, mdVC, strings.ToLower(traceLevel), cmd, logger, 0}
 
     if c.Logger == nil {
         errs = append(errs, errors.New("logger of client is not set"))
@@ -81,10 +94,10 @@ func (c *PolarisClient)Init(clientId, UserId, token, stVC, mdVC, traceLevel, cmd
         errs = append(errs, errors.New("please set any of services:[storage,metadata]"))
     }
 
-    if len(c.Command) == 0 {
+    if c.Command == nil {
         errs = append(errs, errors.New("No commands set!"))
     } else {
-        _, ok := FindElementInArray(Commands, cmd)
+        _, ok := FindElementInArray(Commands, cmd.Command)
         if ok == false {
             errs = append(errs, errors.New("Wrong Command"))
         }
@@ -194,24 +207,27 @@ func (c *PolarisClient) UploadDir(dir string, to chan int ) (ch chan http.Respon
         }
 
         t2 := time.Now()
-        completeCount := 0
         for i := 0; i < len(walker.Files); i++ {
             select {
             case <-to:
                 fmt.Println("Timeout!")
                 c.Logger.Println("Timeout!")
+                c.Command.Status = UNKOWN
                 break
             case r := <-ch:
-                completeCount++
+                c.TaskCount--
                 if c.TraceLevel == "debug" {
                     fmt.Println(r)
                     c.Logger.Println(r)
                 }
             }
         }
+        if c.Command.Status != UNKOWN {
+            c.Command.Status = DONE
+        }
 
-        defer fmt.Println(completeCount, "Files Uploaded")
-        defer c.Logger.Println(completeCount, "Files Uploaded")
+        defer fmt.Println(len(walker.Files) - c.TaskCount, "Files Uploaded")
+        defer c.Logger.Println(len(walker.Files) - c.TaskCount, "Files Uploaded")
         defer fmt.Printf("Concurrency: %d, Paralell: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
         defer c.Logger.Printf("Concurrency: %d, Paralell: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
     }
@@ -226,6 +242,7 @@ func (c *PolarisClient) UploadDir(dir string, to chan int ) (ch chan http.Respon
  */
  func (c *PolarisClient) UploadFile(path string, url string) (ch chan *http.Response, err error) {
 
+     c.TaskCount++
      method := "PUT"
      var headers map[string]string
      headers = make(map[string]string)
@@ -264,7 +281,6 @@ func (c *PolarisClient) UploadDir(dir string, to chan int ) (ch chan http.Respon
              c.Logger.Fatal(err)
          }
      }
-
      ch <- r
      return
  }

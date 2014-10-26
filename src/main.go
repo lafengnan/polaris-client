@@ -58,7 +58,10 @@ func main() {
     metadataService := os.Getenv("MD_SVC")
 
     client := new(utils.PolarisClient)
-    errs := client.Init(clientId, userId, token, storageService, metadataService, *traceLevel, *cmd, logger)
+    CMD := new(utils.PolarisCommand)
+    CMD.Command = *cmd
+    CMD.Status = utils.WAITTING
+    errs := client.Init(clientId, userId, token, storageService, metadataService, *traceLevel, CMD, logger)
 
     if len(errs) > 0 {
         for i, err := range errs {
@@ -94,7 +97,7 @@ func main() {
             timeoutCh <- 1
         }()
     }
-    switch client.Command {
+    switch client.Command.Command {
     case "UploadFile":
         client.Logger.Printf("source directory/file: %s\n", *dirToUpload)
         var t1 time.Time
@@ -103,6 +106,7 @@ func main() {
         if err != nil {
             client.Logger.Fatal(err)
         }
+        client.Command.Status = utils.RUNNING
         if fileInfo.IsDir() {
             client.UploadDir(*dirToUpload, timeoutCh)
         } else {
@@ -115,24 +119,27 @@ func main() {
             }
             t2 := time.Now()
             waitNum := *concurrencyNum
-            completeCount := 0
             for i := 0; i < waitNum; i++ {
                 select {
                 case <- timeoutCh:
                     fmt.Println("Timeout!")
                     client.Logger.Println("Timeout!")
+                    client.Command.Status = utils.UNKOWN
                     break
                 case r := <- ch:
-                    completeCount++
+                    client.TaskCount--
                     if client.TraceLevel == "debug" {
                         fmt.Println(r)
                         client.Logger.Println(r)
                     }
                 }
             }
+            if client.Command.Status == utils.RUNNING{
+                client.Command.Status = utils.DONE
+            }
 
-            defer fmt.Println(completeCount, "Files Uploaded")
-            defer client.Logger.Println(completeCount, "Files Uploaded")
+            defer fmt.Println(*concurrencyNum - client.TaskCount, "Files Uploaded")
+            defer client.Logger.Println(*concurrencyNum - client.TaskCount, "Files Uploaded")
             defer fmt.Printf("Concurrency: %d, Paralell: %d\n", int64(*concurrencyNum)*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
             defer client.Logger.Printf("Concurrency: %d, Paralell: %d\n", int64(*concurrencyNum)*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
         }
