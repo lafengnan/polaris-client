@@ -34,6 +34,7 @@ func main() {
     }
     log.SetOutput(logFile)
     log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
+    logger := log.New(logFile, "polaris-client ", log.Flags())
 
     if *cpuProfile != "" {
         f, err := os.Create(*cpuProfile)
@@ -51,26 +52,34 @@ func main() {
     storageService := os.Getenv("STORAGE_SVC")
     metadataService := os.Getenv("MD_SVC")
 
-    if len(storageService) == 0 || len(token) == 0 || len(userId) == 0 {
-        fmt.Println("Fatal: Service error!")
-        log.Fatal("Fatal: Service error!")
+    client := new(utils.PolarisClient)
+    errs := client.Init(clientId, userId, token, storageService, metadataService, *traceLevel, nil, logger)
+
+    if len(errs) > 0 {
+        for i, err := range errs {
+            if i == len(errs) - 1 {
+                log.Fatal(err)
+            } else {
+                log.Println(err)
+            }
+        }
     }
 
-    log.Printf("source directory: %s\n", *dirToUpload)
-    log.Printf("log file: %s\n", *logFileName)
-    log.Printf("log level: %s\n", *traceLevel)
+    client.Logger.Printf("source directory: %s\n", *dirToUpload)
+    client.Logger.Printf("log file: %s\n", *logFileName)
+    client.Logger.Printf("log level: %s\n", *traceLevel)
     if *concurrencyNum > 1 {
-        log.Printf("concurrency: %d\n", *concurrencyNum)
+        client.Logger.Printf("concurrency: %d\n", *concurrencyNum)
     } else if *concurrencyNum == 1 {
-        log.Println("concurrency: To be calculated!")
+        client.Logger.Println("concurrency: To be calculated!")
     }
-    log.Printf("Timeout : %d seconds\n", *timeout)
-    log.Println("user_id: ", userId)
-    log.Println("clientId: ", clientId)
-    log.Println("storage service: ", storageService)
-    log.Println("metadata service: ", metadataService)
-    log.Println("token: ", token)
-    log.Println("-----\n\n")
+    client.Logger.Printf("Timeout : %d seconds\n", *timeout)
+    client.Logger.Println("user_id: ", userId)
+    client.Logger.Println("clientId: ", clientId)
+    client.Logger.Println("storage service: ", storageService)
+    client.Logger.Println("metadata service: ", metadataService)
+    client.Logger.Println("token: ", token)
+    client.Logger.Println("-----\n\n")
 
    
     walker, err := utils.GetDirAndFileList(*dirToUpload)
@@ -78,10 +87,10 @@ func main() {
     if err != nil {
         return 
     }
-    if *traceLevel == "debug" {
+    if  client.TraceLevel == "debug" {
         for _, f := range walker.Files {
             fmt.Println(f)
-            log.Println(f)
+            client.Logger.Println(f)
         }
     }
 
@@ -97,7 +106,7 @@ func main() {
     ch := make(chan http.Response, len(walker.Files))
     completeCount := 0
     fmt.Printf("Preapare to upload %d files\n", len(walker.Files))
-    log.Printf("Preapare to upload %d files\n", len(walker.Files))
+    client.Logger.Printf("Preapare to upload %d files\n", len(walker.Files))
     
 
     t1 := time.Now()
@@ -123,19 +132,19 @@ func main() {
         select {
         case <-timeoutCh:
             fmt.Println("Timeout!")
-            log.Println("Timeout!")
+            client.Logger.Println("Timeout!")
             break
         case r := <-ch:
             completeCount++
             if *traceLevel == "debug" {
                 fmt.Println(r)
-                log.Println(r)
+                client.Logger.Println(r)
             }
         }
     }
 
     defer fmt.Println(completeCount, "Files Uploaded")
-    defer log.Println(completeCount, "Files Uploaded")
+    defer client.Logger.Println(completeCount, "Files Uploaded")
     defer fmt.Printf("Concurrency: %d, Paralell: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
-    defer log.Printf("Concurrency: %d, Paralell: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
+    defer client.Logger.Printf("Concurrency: %d, Paralell: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
 }

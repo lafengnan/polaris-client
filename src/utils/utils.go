@@ -47,6 +47,17 @@ func GetFunctionName(i interface{}) string {
 	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 }
 
+func FindElementInArray(array []string, e interface{}) (pos int, has bool) {
+
+    for i, element := range array {
+        if e == element {
+            pos, has = i, true
+            return
+        }
+    }
+    return -1, false
+} 
+
 func Task(f func(string, string, string, chan http.Response) error, path, url, traceLevel string, ch chan http.Response) error {
 
 	_, t1 := Trace(GetFunctionName(f), path)
