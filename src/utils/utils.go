@@ -1,21 +1,17 @@
 package utils
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
 	"io"
+    "os"
 	"io/ioutil"
 	"log"
 	"net/http"
-    "net/url"
-	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
     "time"
-    "github.com/belogik/goes"
 )
 
 type Walker struct {
@@ -60,8 +56,8 @@ func FindElementInArray(array []string, e interface{}) (pos int, has bool) {
 
 func Task(f func(string, string, string, chan http.Response) error, path, url, traceLevel string, ch chan http.Response) error {
 
-	_, t1 := Trace(GetFunctionName(f), path)
-	defer Un(GetFunctionName(f), t1, path)
+	s, t1 := Trace(GetFunctionName(f), path)
+	defer Un(s, t1, path)
 
 	err := f(path, url, traceLevel, ch)
 
@@ -98,69 +94,6 @@ func GetDirAndFileList(path string) (Walker, error) {
 
 	return *walker, err
 }
-
-func CallAPI(method, url string, content *[]byte, h map[string]string) (*http.Response, error) {
-
-	_, t1 := Trace(reflect.TypeOf(CallAPI).Name(), method, url)
-	defer Un(reflect.TypeOf(CallAPI).Name(), t1, method, url)
-	if len(h)%2 == 1 {
-		return nil, errors.New("syntax err: # header != # of values")
-	}
-
-	req, err := http.NewRequest(method, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	for k, v := range h {
-		req.Header.Set(k, v)
-	}
-
-	req.ContentLength = int64(len(*content))
-
-	if req.ContentLength > 0 {
-		req.Body = readCloser{bytes.NewReader(*content)}
-	}
-
-	return (new(http.Client)).Do(req)
-}
-
-func CheckHttpResponseStatusCode(resp *http.Response) error {
-	switch resp.StatusCode {
-	case 200, 201, 202, 204:
-		return nil
-	case 400:
-		return errors.New("Error: response == 400 bad request")
-	case 401:
-		return errors.New("Error: response == 401 unauthorised")
-	case 403:
-		return errors.New("Error: response == 403 forbidden")
-	case 404:
-		return errors.New("Error: response == 404 not found")
-	case 405:
-		return errors.New("Error: response == 405 method not allowed")
-	case 409:
-		return errors.New("Error: response == 409 conflict")
-	case 413:
-		return errors.New("Error: response == 413 over limit")
-	case 415:
-		return errors.New("Error: response == 415 bad media type")
-	case 422:
-		return errors.New("Error: response == 422 unprocessable")
-	case 429:
-		return errors.New("Error: response == 429 too many request")
-	case 500:
-		return errors.New("Error: response == 500 instance fault / server err")
-	case 501:
-		return errors.New("Error: response == 501 not implemented")
-	case 503:
-		return errors.New("Error: response == 503 service unavailable")
-	}
-	fmt.Println("Error: unexpected response status code: ", resp.StatusCode)
-	log.Fatal("Error: unexpected response status code: ", resp.StatusCode)
-	return errors.New("Error: unexpected response status code")
-}
-
 
 /**Upload File(s) to polaris storage
  * @param path the file(s) to upload 
@@ -213,27 +146,3 @@ func UploadFile(path string, url string, traceLevel string, ch chan http.Respons
 
 	return err
 }
-
-/**Index the metadata to Elasticsearch
- * @esConn the connection between client and ES
- * @d the metadata document to indexing
- * @extraArgs extral arguments sent to ES
- * @ch the chan for goroutine communications
- */
-func IndexMetadata(esConn goes.Connection, d goes.Document, extraArgs url.Values, ch chan goes.Response) (err error) {
-    r, err := esConn.Index(d, extraArgs)
-    ch <- r
-    return 
-}
-
-/**Delete the metadata from ES
- * @esConn the connection between client and ES
- * @d the metadata document to delete from ES
- * @extraArgs extral arguments sent to ES
- * @ch the chan for goroutine communications
- */
- func DeleteMetadata(esConn goes.Connection, d goes.Document, extraArgs url.Values, ch chan goes.Response) (err error) {
-     r, err := esConn.Delete(d, extraArgs)
-     ch <- r
-     return 
- }
