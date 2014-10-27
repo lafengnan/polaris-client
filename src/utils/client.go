@@ -47,7 +47,7 @@ type PolarisClient struct {
     Command *PolarisCommand
     Logger *log.Logger
     TotalTasks int
-    TaskCount int
+    ActiveTasks int
     Timeout chan int
 }
 
@@ -72,7 +72,7 @@ func (c *PolarisClient) Stat(begin, end time.Time) (err error) {
         err = errors.New("End time should later than begin time")
     }
     if err == nil{
-        completed := c.TotalTasks - c.TaskCount
+        completed := c.TotalTasks - c.ActiveTasks
         duration := end.Sub(begin).Nanoseconds()
         Parallel := runtime.NumCPU()
 
@@ -85,6 +85,18 @@ func (c *PolarisClient) Stat(begin, end time.Time) (err error) {
     return 
 }
 
+func (c *PolarisClient) Info() {
+    c.Logger.Println("userId: ", c.UserId)
+    c.Logger.Println("clientId: ", c.ClientId)
+    c.Logger.Printf("log level: %s\n", c.TraceLevel)
+    c.Logger.Printf("total tasks: %d\n", c.TotalTasks)
+    c.Logger.Printf("active tasks: %d\n", c.ActiveTasks)
+    c.Logger.Printf("command: {%s:%d}\n", c.Command.Command, c.Command.Status)
+    c.Logger.Println("storage service: ", c.StorageServiceURL)
+    c.Logger.Println("metadata service: ", c.MetadataServiceURL)
+    c.Logger.Println("token: ", c.Token)
+}
+
 /**Initialize Polaris Cient
  * @clientId client id
  * @userId user id for a specific user
@@ -95,12 +107,12 @@ func (c *PolarisClient) Stat(begin, end time.Time) (err error) {
  * @cmd command list to run 
  * @logger the logger fo client
  */
-func (c *PolarisClient)Init(clientId, UserId, token, stVC, mdVC, traceLevel string, cmd *PolarisCommand, logger *log.Logger, taskNum, taskCount int, timeoutCh chan int) (errs []error) {
+func (c *PolarisClient)Init(clientId, UserId, token, stVC, mdVC, traceLevel string, cmd *PolarisCommand, logger *log.Logger, tasks int, timeoutCh chan int) (errs []error) {
 
     s, t1 := Trace(GetFunctionName(c.Init))
     defer Un(s, t1)
 
-    *c = PolarisClient{clientId, UserId, token, stVC, mdVC, strings.ToLower(traceLevel), cmd, logger, taskNum, taskCount, timeoutCh}
+    *c = PolarisClient{clientId, UserId, token, stVC, mdVC, strings.ToLower(traceLevel), cmd, logger, tasks, 0, timeoutCh}
 
     if c.Logger == nil {
         errs = append(errs, errors.New("logger of client is not set"))
@@ -243,7 +255,7 @@ func (c *PolarisClient) UploadDir(dir string, ch chan *http.Response ) (err erro
                 c.Command.Status = UNKOWN
                 break
             case r := <-ch:
-                c.TaskCount--
+                c.ActiveTasks--
                 if c.TraceLevel == "debug" {
                     fmt.Println(r)
                     c.Logger.Println(r)
@@ -267,7 +279,7 @@ func (c *PolarisClient) UploadDir(dir string, ch chan *http.Response ) (err erro
  */
  func (c *PolarisClient) UploadFile(path string, ch chan *http.Response) (err error) {
 
-     c.TaskCount++
+     c.ActiveTasks++
      method := "PUT"
      var headers map[string]string
      headers = make(map[string]string)

@@ -61,7 +61,23 @@ func main() {
     testCmd.Command = *cmd
     testCmd.Status = utils.WAITTING
     timeoutCh := make(chan int)
-    errs := client.Init(clientId, userId, token, storageService, metadataService, *traceLevel, testCmd, logger, 0, 0, timeoutCh)
+
+
+    w, err := utils.GetDirAndFileList(*dirToUpload)
+    if err != nil {
+        fmt.Println(err)
+        client.Logger.Fatal(err)
+    }
+    totalTasks := 0
+    if len(w.Files) > 0 && *concurrencyNum > 1 {
+        log.Fatal("Error config! directory upload and concurrencyNum should not be configure together")
+    }
+    if len(w.Files) > 0 {
+        totalTasks = len(w.Files)
+    } else {
+        totalTasks = *concurrencyNum
+    }
+    errs := client.Init(clientId, userId, token, storageService, metadataService, *traceLevel, testCmd, logger, totalTasks, timeoutCh)
 
     if len(errs) > 0 {
         for i, err := range errs {
@@ -75,15 +91,8 @@ func main() {
     }
 
     client.Logger.Printf("log file: %s\n", *logFileName)
-    client.Logger.Printf("log level: %s\n", *traceLevel)
-    client.Logger.Printf("Timeout : %d seconds\n", *timeout)
-    client.Logger.Println("userId: ", userId)
-    client.Logger.Println("clientId: ", clientId)
-    client.Logger.Println("storage service: ", storageService)
-    client.Logger.Println("metadata service: ", metadataService)
-    client.Logger.Println("token: ", token)
-    client.Logger.Println("-----\n\n")
-
+    client.Logger.Printf("timeout : %d seconds\n", *timeout)
+    client.Info()
 
     if *timeout > 0 {
         go func(){
@@ -101,12 +110,7 @@ func main() {
         }
         client.Command.Status = utils.RUNNING
         if fileInfo.IsDir() {
-            w, err := utils.GetDirAndFileList(*dirToUpload)
-            if err != nil {
-                fmt.Println(err)
-                client.Logger.Fatal(err)
-            }
-            client.TotalTasks = len(w.Files)
+            
             utils.FileTask(client.UploadDir, *dirToUpload, ch)
         } else {
             ch = make(chan *http.Response, *concurrencyNum)
@@ -125,7 +129,7 @@ func main() {
                     client.Command.Status = utils.UNKOWN
                     break
                 case r := <- ch:
-                    client.TaskCount--
+                    client.ActiveTasks--
                     if client.TraceLevel == "debug" {
                         fmt.Println(r)
                         client.Logger.Println(r)
