@@ -39,7 +39,7 @@ class TestAlias(object):
 
     """
     def __init__(self, num):
-        super(TestAlias).__init__(self)
+        super(TestAlias, self).__init__()
         self.num_clients = num
         self.num_concurrency = num
 
