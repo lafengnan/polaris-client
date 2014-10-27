@@ -47,17 +47,19 @@ type PolarisClient struct {
     Command *PolarisCommand
     Logger *log.Logger
     TaskCount int
+    Timeout chan int
 }
 
 type FileOps interface {
-    UploadFile(path string, url string) (ch chan http.Response, err error)
-    DeleteFile(path string, url string) (ch chan http.Response, err error)
-    ListFile(url string) (ch chan http.Response, err error)
+    UploadDir(path string, ch chan *http.Response) (err error)
+    ListFile(path string, ch chan *http.Response) (err error)
+    UploadFile(path string, ch chan *http.Response) (err error)
+    DeleteFile(path string, ch chan *http.Response) (err error)
 }
 
 type MetadataOps interface {
-    IndexDocument(esConn goes.Connection, d goes.Document, extraArgs url.Values) (ch chan goes.Response, err error)
-    DeleteDocument(esConn goes.Connection, d goes.Document, extraArgs url.Values) (ch chan goes.Response, err error)
+    IndexDocument(esConn goes.Connection, d goes.Document, extraArgs url.Values, ch chan *goes.Response) (err error)
+    DeleteDocument(esConn goes.Connection, d goes.Document, extraArgs url.Values, ch chan *goes.Response) (err error)
 }
 
 /**Initialize Polaris Cient
@@ -70,12 +72,12 @@ type MetadataOps interface {
  * @cmd command list to run 
  * @logger the logger fo client
  */
-func (c *PolarisClient)Init(clientId, UserId, token, stVC, mdVC, traceLevel string, cmd *PolarisCommand, logger *log.Logger) (errs []error) {
+func (c *PolarisClient)Init(clientId, UserId, token, stVC, mdVC, traceLevel string, cmd *PolarisCommand, logger *log.Logger, timeoutCh chan int) (errs []error) {
 
     s, t1 := Trace(GetFunctionName(c.Init))
     defer Un(s, t1)
 
-    *c = PolarisClient{clientId, UserId, token, stVC, mdVC, strings.ToLower(traceLevel), cmd, logger, 0}
+    *c = PolarisClient{clientId, UserId, token, stVC, mdVC, strings.ToLower(traceLevel), cmd, logger, 0, timeoutCh}
 
     if c.Logger == nil {
         errs = append(errs, errors.New("logger of client is not set"))
@@ -177,7 +179,7 @@ func CheckHttpResponseStatusCode(resp *http.Response) error {
 	return errors.New("Error: unexpected response status code")
 }
 
-func (c *PolarisClient) UploadDir(dir string, to chan int ) (ch chan http.Response, err error) {
+func (c *PolarisClient) UploadDir(dir string, ch chan *http.Response ) (err error) {
     fileInfo, err := os.Stat(dir)
     if err != nil {
         c.Logger.Fatal(err)
@@ -187,7 +189,7 @@ func (c *PolarisClient) UploadDir(dir string, to chan int ) (ch chan http.Respon
         os.Exit(1)
     } else {
         walker, err := GetDirAndFileList(dir)
-        ch = make(chan http.Response, len(walker.Files))
+        ch = make(chan *http.Response, len(walker.Files))
         if err != nil {
             c.Logger.Fatal(err)
         }
@@ -202,14 +204,13 @@ func (c *PolarisClient) UploadDir(dir string, to chan int ) (ch chan http.Respon
         }
         t1 := time.Now()
         for _, filename := range walker.Files {
-            url := c.StorageServiceURL + "/" + c.UserId + "/files/" + filepath.Base(filename) + "?previous="
-            go Task(UploadFile, filename, url, c.TraceLevel, ch)
+            go FileTask(c.UploadFile, filename, ch)
         }
 
         t2 := time.Now()
         for i := 0; i < len(walker.Files); i++ {
             select {
-            case <-to:
+            case <-c.Timeout:
                 fmt.Println("Timeout!")
                 c.Logger.Println("Timeout!")
                 c.Command.Status = UNKOWN
@@ -240,7 +241,7 @@ func (c *PolarisClient) UploadDir(dir string, to chan int ) (ch chan http.Respon
  * @param traceLevel the log level
  * @param ch the chan to transit http.Response
  */
- func (c *PolarisClient) UploadFile(path string, url string) (ch chan *http.Response, err error) {
+ func (c *PolarisClient) UploadFile(path string, ch chan *http.Response) (err error) {
 
      c.TaskCount++
      method := "PUT"
@@ -257,6 +258,8 @@ func (c *PolarisClient) UploadDir(dir string, to chan int ) (ch chan http.Respon
      if err != nil {
          c.Logger.Fatal(err)
      }
+
+     url := c.StorageServiceURL + "/" + c.UserId + "/files/" + filepath.Base(path) + "?previous="
 
      c.Logger.Printf("url: %s\nmethod: %s\n", url, method)
      if strings.ToLower(c.TraceLevel) == "debug" {
@@ -285,11 +288,11 @@ func (c *PolarisClient) UploadDir(dir string, to chan int ) (ch chan http.Respon
      return
  }
 
-func (c *PolarisClient) DeleteFile(path string, url string) (ch chan http.Response, err error) {
+func (c *PolarisClient) DeleteFile(path string, ch chan *http.Response) (err error) {
     return
 }
 
-func (c *PolarisClient) ListFile(url string)(ch chan http.Response, err error) {
+func (c *PolarisClient) ListFile(path string, ch chan *http.Response)(err error) {
     return 
 }
 

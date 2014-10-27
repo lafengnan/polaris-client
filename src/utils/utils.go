@@ -4,13 +4,11 @@ import (
 	"fmt"
 	"io"
     "os"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"strings"
     "time"
 )
 
@@ -54,24 +52,37 @@ func FindElementInArray(array []string, e interface{}) (pos int, has bool) {
     return -1, false
 } 
 
-func Task(f func(string, string, string, chan http.Response) error, path, url, traceLevel string, ch chan http.Response) error {
+func NewTask(f interface{}, args... interface{}) (err error) {
+    s, t1 := Trace(GetFunctionName(f), args)
+    defer Un(s, t1, args)
+    if len(args) > 1 {
+        err = f.(func(...interface{})(err error))(args)
+    } else if len(args) == 1 {
+        err = f.(func(interface{})(err error))(args[0])
+    } else {
+        err = f.(func()(err error))()
+    }
+
+    return
+}
+
+/**Start a File operations Task
+ * @f the function to execute
+ * @path the file/dir path
+ * @url the service uri
+ * @ch the chan with *http.Response
+ */
+func FileTask(f func(string, chan *http.Response) error, path string, ch chan *http.Response) error {
 
 	s, t1 := Trace(GetFunctionName(f), path)
 	defer Un(s, t1, path)
 
-	err := f(path, url, traceLevel, ch)
+	err := f(path, ch)
 
 	if err != nil {
 		log.Fatal(err)
 	}
 	return err
-	//    if len(args) > 1 {
-	//        go f.(func(...interface{}))(args)
-	//    } else if len(args) == 1 {
-	//        go f.(func(interface{}))(args[0])
-	//    } else {
-	//        go f.(func())()
-	//    }
 }
 func GetDirAndFileList(path string) (Walker, error) {
 
@@ -93,56 +104,4 @@ func GetDirAndFileList(path string) (Walker, error) {
 		})
 
 	return *walker, err
-}
-
-/**Upload File(s) to polaris storage
- * @param path the file(s) to upload 
- * @param url the API uri
- * @param traceLevel the log level
- * @param ch the chan to transit http.Response
- */
-func UploadFile(path string, url string, traceLevel string, ch chan http.Response) error {
-
-	method := "PUT"
-	var headers map[string]string
-	headers = make(map[string]string)
-	headers["Authorization"] = "Bearer " + os.Getenv("TOKEN")
-	headers["Content-type"] = "text/plain"
-
-	fContent, err := ioutil.ReadFile(path)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("url: %s\nmethod: %s\n", url, method)
-	if strings.ToLower(traceLevel) == "debug" {
-		for k, v := range headers {
-			fmt.Printf("%s: %s\n", k, v)
-			log.Printf("%s: %s\n", k, v)
-		}
-	}
-
-	res, err := CallAPI(method, url, &fContent, headers)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = CheckHttpResponseStatusCode(res)
-	if err != nil {
-		if 401 == res.StatusCode {
-			fmt.Println(err)
-			log.Fatal(err)
-		} else {
-			log.Fatal(err)
-		}
-	}
-
-	ch <- *res
-
-	return err
 }

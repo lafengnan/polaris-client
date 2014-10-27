@@ -9,7 +9,6 @@ import (
     "time"
     "net/http"
     "runtime/pprof"
-    "path/filepath"
     "utils"
 )
 
@@ -58,13 +57,15 @@ func main() {
     metadataService := os.Getenv("MD_SVC")
 
     client := new(utils.PolarisClient)
-    CMD := new(utils.PolarisCommand)
-    CMD.Command = *cmd
-    CMD.Status = utils.WAITTING
-    errs := client.Init(clientId, userId, token, storageService, metadataService, *traceLevel, CMD, logger)
+    testCmd := new(utils.PolarisCommand)
+    testCmd.Command = *cmd
+    testCmd.Status = utils.WAITTING
+    timeoutCh := make(chan int)
+    errs := client.Init(clientId, userId, token, storageService, metadataService, *traceLevel, testCmd, logger, timeoutCh)
 
     if len(errs) > 0 {
         for i, err := range errs {
+            fmt.Println(err)
             if i == len(errs) - 1 {
                 log.Fatal(err)
             } else {
@@ -75,21 +76,14 @@ func main() {
 
     client.Logger.Printf("log file: %s\n", *logFileName)
     client.Logger.Printf("log level: %s\n", *traceLevel)
-    if *concurrencyNum > 1 {
-        client.Logger.Printf("concurrency: %d\n", *concurrencyNum)
-    } else if *concurrencyNum == 1 {
-        client.Logger.Println("concurrency: To be calculated!")
-    }
     client.Logger.Printf("Timeout : %d seconds\n", *timeout)
-    client.Logger.Println("user_id: ", userId)
+    client.Logger.Println("userId: ", userId)
     client.Logger.Println("clientId: ", clientId)
     client.Logger.Println("storage service: ", storageService)
     client.Logger.Println("metadata service: ", metadataService)
     client.Logger.Println("token: ", token)
     client.Logger.Println("-----\n\n")
 
-
-    timeoutCh := make(chan int)
 
     if *timeout > 0 {
         go func(){
@@ -100,22 +94,19 @@ func main() {
     switch client.Command.Command {
     case "UploadFile":
         client.Logger.Printf("source directory/file: %s\n", *dirToUpload)
-        var t1 time.Time
-        var ch chan http.Response
+        var ch chan *http.Response
         fileInfo, err := os.Stat(*dirToUpload)
         if err != nil {
             client.Logger.Fatal(err)
         }
         client.Command.Status = utils.RUNNING
         if fileInfo.IsDir() {
-            client.UploadDir(*dirToUpload, timeoutCh)
+            utils.FileTask(client.UploadDir, *dirToUpload, ch)
         } else {
-            url := client.StorageServiceURL + "/" + userId + "/files/" + filepath.Base(*dirToUpload) + "?previous="
-            ch = make(chan http.Response, *concurrencyNum)
-            
-            t1 = time.Now()
+            ch = make(chan *http.Response, *concurrencyNum)
+            t1 := time.Now()
             for j := 0; j < *concurrencyNum; j++ {
-                go utils.Task(utils.UploadFile, *dirToUpload, url, *traceLevel, ch)
+                go utils.FileTask(client.UploadFile, *dirToUpload, ch)
             }
             t2 := time.Now()
             waitNum := *concurrencyNum
