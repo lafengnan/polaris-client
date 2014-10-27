@@ -32,3 +32,25 @@ func BenchmarkGetFunctionName(b *testing.B) {
         GetFunctionName(TestTrace)
     }
 }
+
+func TestGetDirAndFileList(t *testing.T) {
+    path1 := "/home/panzhongbin/test_files/210_files/"
+    path2 := "/hahah"
+    w1, err1 := GetDirAndFileList(path1)
+    w2, err2 := GetDirAndFileList(path2)
+    if len(w1.Files) != 210 || err1 != nil {
+        t.Errorf("GetDirAndFileList(\"/home/panzhongbin/test_files/210_files\") failed", w1, err1)
+    }
+
+    if err2 == nil {
+        t.Errorf("GetDirAndFileList(\"/hahah/\") failed", w2, err2)
+    }
+
+}
+
+func BenchmarkGetDirAndFileList(b *testing.B) {
+    path := "/home/panzhongbin/test_files/210_files/"
+    for i := 0; i < b.N; i++ {
+        GetDirAndFileList(path)
+    }
+}

@@ -46,6 +46,7 @@ type PolarisClient struct {
     TraceLevel string
     Command *PolarisCommand
     Logger *log.Logger
+    TotalTasks int
     TaskCount int
     Timeout chan int
 }
@@ -62,6 +63,28 @@ type MetadataOps interface {
     DeleteDocument(esConn goes.Connection, d goes.Document, extraArgs url.Values, ch chan *goes.Response) (err error)
 }
 
+/**Display stats of the test
+ * @begin the begin time for Stat
+ * @end the end time for Stat
+ */
+func (c *PolarisClient) Stat(begin, end time.Time) (err error) {
+    if end.Sub(begin) < 0 {
+        err = errors.New("End time should later than begin time")
+    }
+    if err == nil{
+        completed := c.TotalTasks - c.TaskCount
+        duration := end.Sub(begin).Nanoseconds()
+        Parallel := runtime.NumCPU()
+
+        fmt.Println(completed, "Files Uploaded!")
+        c.Logger.Println(completed, "Files Uploaded!")
+        fmt.Printf("Concurrency: %d, Parallel: %d\n", int64(c.TotalTasks)*1E9/duration, Parallel)
+        c.Logger.Printf("Concurrency: %d, Parallel: %d\n", int64(c.TotalTasks)*1E9/duration, Parallel)
+    }
+
+    return 
+}
+
 /**Initialize Polaris Cient
  * @clientId client id
  * @userId user id for a specific user
@@ -72,12 +95,12 @@ type MetadataOps interface {
  * @cmd command list to run 
  * @logger the logger fo client
  */
-func (c *PolarisClient)Init(clientId, UserId, token, stVC, mdVC, traceLevel string, cmd *PolarisCommand, logger *log.Logger, timeoutCh chan int) (errs []error) {
+func (c *PolarisClient)Init(clientId, UserId, token, stVC, mdVC, traceLevel string, cmd *PolarisCommand, logger *log.Logger, taskNum, taskCount int, timeoutCh chan int) (errs []error) {
 
     s, t1 := Trace(GetFunctionName(c.Init))
     defer Un(s, t1)
 
-    *c = PolarisClient{clientId, UserId, token, stVC, mdVC, strings.ToLower(traceLevel), cmd, logger, 0, timeoutCh}
+    *c = PolarisClient{clientId, UserId, token, stVC, mdVC, strings.ToLower(traceLevel), cmd, logger, taskNum, taskCount, timeoutCh}
 
     if c.Logger == nil {
         errs = append(errs, errors.New("logger of client is not set"))
@@ -179,6 +202,10 @@ func CheckHttpResponseStatusCode(resp *http.Response) error {
 	return errors.New("Error: unexpected response status code")
 }
 
+/**Upload a given directory to storage
+ * @dir the directory path to Upload
+ * @ch the chan for communication
+ */
 func (c *PolarisClient) UploadDir(dir string, ch chan *http.Response ) (err error) {
     fileInfo, err := os.Stat(dir)
     if err != nil {
@@ -227,10 +254,7 @@ func (c *PolarisClient) UploadDir(dir string, ch chan *http.Response ) (err erro
             c.Command.Status = DONE
         }
 
-        defer fmt.Println(len(walker.Files) - c.TaskCount, "Files Uploaded")
-        defer c.Logger.Println(len(walker.Files) - c.TaskCount, "Files Uploaded")
-        defer fmt.Printf("Concurrency: %d, Paralell: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
-        defer c.Logger.Printf("Concurrency: %d, Paralell: %d\n", int64(len(walker.Files))*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
+        defer c.Stat(t1, t2)
     }
     return
 }
@@ -279,9 +303,9 @@ func (c *PolarisClient) UploadDir(dir string, ch chan *http.Response ) (err erro
      if err != nil {
          if 401 == r.StatusCode {
              fmt.Println(err)
-             c.Logger.Fatal(err)
+             c.Logger.Println(err)
          } else {
-             c.Logger.Fatal(err)
+             c.Logger.Println(err)
          }
      }
      ch <- r

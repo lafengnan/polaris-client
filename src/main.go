@@ -61,7 +61,7 @@ func main() {
     testCmd.Command = *cmd
     testCmd.Status = utils.WAITTING
     timeoutCh := make(chan int)
-    errs := client.Init(clientId, userId, token, storageService, metadataService, *traceLevel, testCmd, logger, timeoutCh)
+    errs := client.Init(clientId, userId, token, storageService, metadataService, *traceLevel, testCmd, logger, 0, 0, timeoutCh)
 
     if len(errs) > 0 {
         for i, err := range errs {
@@ -101,9 +101,16 @@ func main() {
         }
         client.Command.Status = utils.RUNNING
         if fileInfo.IsDir() {
+            w, err := utils.GetDirAndFileList(*dirToUpload)
+            if err != nil {
+                fmt.Println(err)
+                client.Logger.Fatal(err)
+            }
+            client.TotalTasks = len(w.Files)
             utils.FileTask(client.UploadDir, *dirToUpload, ch)
         } else {
             ch = make(chan *http.Response, *concurrencyNum)
+            client.TotalTasks = *concurrencyNum
             t1 := time.Now()
             for j := 0; j < *concurrencyNum; j++ {
                 go utils.FileTask(client.UploadFile, *dirToUpload, ch)
@@ -129,10 +136,7 @@ func main() {
                 client.Command.Status = utils.DONE
             }
 
-            defer fmt.Println(*concurrencyNum - client.TaskCount, "Files Uploaded")
-            defer client.Logger.Println(*concurrencyNum - client.TaskCount, "Files Uploaded")
-            defer fmt.Printf("Concurrency: %d, Paralell: %d\n", int64(*concurrencyNum)*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
-            defer client.Logger.Printf("Concurrency: %d, Paralell: %d\n", int64(*concurrencyNum)*1E9/(t2.Sub(t1).Nanoseconds()), runtime.NumCPU())
+            defer client.Stat(t1, t2)
         }
 
     }

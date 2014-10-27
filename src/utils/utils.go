@@ -72,7 +72,7 @@ func NewTask(f interface{}, args... interface{}) (err error) {
  * @url the service uri
  * @ch the chan with *http.Response
  */
-func FileTask(f func(string, chan *http.Response) error, path string, ch chan *http.Response) error {
+func FileTask(f func(string, chan *http.Response) error, path string, ch chan *http.Response) {
 
 	s, t1 := Trace(GetFunctionName(f), path)
 	defer Un(s, t1, path)
@@ -82,8 +82,10 @@ func FileTask(f func(string, chan *http.Response) error, path string, ch chan *h
 	if err != nil {
 		log.Fatal(err)
 	}
-	return err
 }
+/**Get dirs and files list of a given path
+ * @path the file/dir path to analysis
+ */
 func GetDirAndFileList(path string) (Walker, error) {
 
 	walker := new(Walker)
