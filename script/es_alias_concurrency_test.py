@@ -2,7 +2,6 @@
 import gevent
 import logging
 import os
-import sys
 from optparse import OptionParser
 
 from elastic_polaris.index_creation import IndexCreator
@@ -32,30 +31,47 @@ index_creator = IndexCreator(es_conn, ZK_HOSTS, ES_MAX_ALIASES)
 user_id = "es_alias_concurrency_test_user_id_%s"
 
 
-class TestAlias:
+class TestAlias(object):
+    """
+    TestAlias instance is used to run alias create/cleanup test in concurrency.
+    @self.num_clients clients number
+    @self.num_concurrency concurrency number
+
+    """
     def __init__(self, num):
+        super(TestAlias).__init__(self)
         self.num_clients = num
         self.num_concurrency = num
 
     def cleanup(self):
+        """
+        Cleanup the aliases in ES
+        """
         for i in range(self.num_clients):
             alias = user_id % i
             try:
                 indexes = es_conn.get_alias(alias)
                 for index in indexes:
                     index_creator._remove_alias(index, alias)
-            except Exception:
-                continue
+            except Exception: # IndexMissingException, just ignore it
+                pass
 
     def create(self):
+        """
+        Create aliaes in ES
+        """
         create_alias = lambda x: index_creator.create_alias(x)
         for i in range(self.num_clients):
             alias = user_id % i
-            greenlets = [gevent.spawn(create_alias, alias) for i in range(self.num_concurrency)]
+            greenlets = [gevent.spawn(create_alias, alias) \
+                         for i in range(self.num_concurrency)]
             gevent.joinall(greenlets)
 
 
 def main():
+    """
+    main function
+    """
     parser = OptionParser(USAGE)
 
     parser.add_option('-n', '--number', type="int", dest="number", default=50,
