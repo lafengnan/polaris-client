@@ -4,23 +4,23 @@ import (
     "os"
     "fmt"
     "log"
+    "time"
     "errors"
     "bytes"
-    "time"
+    "strings"
     "runtime"
     "reflect"
     "net/http"
     "net/url"
     "io/ioutil"
     "path/filepath"
-    "strings"
     "github.com/belogik/goes"
 )
 
 var Commands []string  = []string {
     "UploadFile",
     "DeleteFile",
-    "ListFile",
+    "ListFiles",
     "IndexDocument",
     "DeleteDocument",
 }
@@ -49,6 +49,15 @@ type PolarisClient struct {
     TotalTasks int
     ActiveTasks int
     Timeout chan int
+}
+
+type ReturnedFile struct {
+    Path string
+    ContentLenght int
+    Etag string
+    ContentType string
+    LastModified string
+    UUID string
 }
 
 type FileOps interface {
@@ -153,9 +162,6 @@ func CallAPI(method, url string, content *[]byte, h map[string]string) (*http.Re
 
 	_, t1 := Trace(reflect.TypeOf(CallAPI).Name(), method, url)
 	defer Un(reflect.TypeOf(CallAPI).Name(), t1, method, url)
-	if len(h)%2 == 1 {
-		return nil, errors.New("syntax err: # header != # of values")
-	}
 
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
@@ -166,10 +172,11 @@ func CallAPI(method, url string, content *[]byte, h map[string]string) (*http.Re
 		req.Header.Set(k, v)
 	}
 
-	req.ContentLength = int64(len(*content))
-
-	if req.ContentLength > 0 {
-		req.Body = readCloser{bytes.NewReader(*content)}
+	if content != nil {
+        req.ContentLength = int64(len(*content))
+        if req.ContentLength > 0 {
+            req.Body = readCloser{bytes.NewReader(*content)}
+        }
 	}
 
 	return (new(http.Client)).Do(req)
@@ -308,7 +315,7 @@ func (c *PolarisClient) UploadDir(dir string, ch chan *http.Response ) (err erro
      r, err := CallAPI(method, url, &fContent, headers)
 
      if err != nil {
-         c.Logger.Fatal(err)
+         c.Logger.Println(err)
      }
 
      err = CheckHttpResponseStatusCode(r)
@@ -329,6 +336,32 @@ func (c *PolarisClient) DeleteFile(path string, ch chan *http.Response) (err err
 }
 
 func (c *PolarisClient) ListFile(path string, ch chan *http.Response)(err error) {
+
+    method := "GET"
+    var headers map[string]string
+    headers = make(map[string]string)
+    headers["Authorization"] = "Bearer " + c.Token
+    c.ActiveTasks++
+
+    url := c.StorageServiceURL + "/" + c.UserId + "/files"
+
+    r, err := CallAPI(method, url, nil, headers)
+
+    if err != nil {
+        c.Logger.Println(err)
+    }
+
+    err = CheckHttpResponseStatusCode(r)
+     if err != nil {
+         if 401 == r.StatusCode {
+             fmt.Println(err)
+             c.Logger.Println(err)
+         } else {
+             c.Logger.Println(err)
+         }
+     }
+
+     ch <- r
     return 
 }
 

@@ -7,7 +7,9 @@ import (
     "runtime"
     "flag"
     "time"
+    "io/ioutil"
     "net/http"
+    "encoding/json"
     "runtime/pprof"
     "utils"
 )
@@ -61,22 +63,29 @@ func main() {
     testCmd.Command = *cmd
     testCmd.Status = utils.WAITTING
     timeoutCh := make(chan int)
-
-
-    w, err := utils.GetDirAndFileList(*dirToUpload)
-    if err != nil {
-        fmt.Println(err)
-        client.Logger.Fatal(err)
-    }
     totalTasks := 0
-    if len(w.Files) > 0 && *concurrencyNum > 1 {
-        log.Fatal("Error config! directory upload and concurrencyNum should not be configure together")
+
+
+    if len(*dirToUpload) != 0 {
+        w, err := utils.GetDirAndFileList(*dirToUpload)
+        if err != nil {
+            fmt.Println(err)
+            client.Logger.Fatal(err)
+        }
+
+        if len(w.Files) > 0 && *concurrencyNum > 1 {
+            log.Fatal("Error config! directory upload and concurrencyNum should not be configure together")
+        }
+        if len(w.Files) > 0 {
+            totalTasks = len(w.Files)
+        } else {
+            totalTasks = *concurrencyNum
+        }
+    } else if *cmd == "ListFiles" {
+        totalTasks = 1
     }
-    if len(w.Files) > 0 {
-        totalTasks = len(w.Files)
-    } else {
-        totalTasks = *concurrencyNum
-    }
+    
+    
     errs := client.Init(clientId, userId, token, storageService, metadataService, *traceLevel, testCmd, logger, totalTasks, timeoutCh)
 
     if len(errs) > 0 {
@@ -101,6 +110,34 @@ func main() {
         }()
     }
     switch client.Command.Command {
+    case "ListFiles":
+        var ch chan *http.Response
+        ch = make(chan *http.Response)
+        go utils.FileTask(client.ListFile, "", ch)
+        select {
+        case <- timeoutCh:
+            fmt.Println("Timeout!")
+            client.Logger.Println("Timeout!")
+            client.Command.Status = utils.UNKOWN
+        case r := <- ch:
+            client.ActiveTasks--
+            var flist  []utils.ReturnedFile
+            defer r.Body.Close()
+            body, err := ioutil.ReadAll(r.Body)
+            if err != nil {
+                fmt.Println(err)
+                client.Logger.Println(err)
+            }
+            err = json.Unmarshal(body, &flist) 
+            if err != nil {
+                fmt.Println(err)
+                client.Logger.Println(err)
+            }
+            for _, f := range flist {
+                fmt.Println(f.Path)
+                client.Logger.Println(f.Path)
+            }
+        }
     case "UploadFile":
         client.Logger.Printf("source directory/file: %s\n", *dirToUpload)
         var ch chan *http.Response
@@ -110,11 +147,9 @@ func main() {
         }
         client.Command.Status = utils.RUNNING
         if fileInfo.IsDir() {
-            
             utils.FileTask(client.UploadDir, *dirToUpload, ch)
         } else {
             ch = make(chan *http.Response, *concurrencyNum)
-            client.TotalTasks = *concurrencyNum
             t1 := time.Now()
             for j := 0; j < *concurrencyNum; j++ {
                 go utils.FileTask(client.UploadFile, *dirToUpload, ch)
