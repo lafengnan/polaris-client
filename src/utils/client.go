@@ -5,8 +5,9 @@ import (
     "fmt"
     "log"
     "time"
-    "errors"
     "bytes"
+    "errors"
+    "strconv"
     "strings"
     "runtime"
     "reflect"
@@ -26,15 +27,15 @@ var Commands []string  = []string {
 }
 
 const (
-    WAITTING = iota
+    WAITING = iota
     RUNNING
     DONE
     UNKOWN
 )
 
 type PolarisCommand struct {
-    Status int
     Command string
+    Status int
 }
 
 type PolarisClient struct {
@@ -51,7 +52,7 @@ type PolarisClient struct {
     Timeout chan int
 }
 
-type ReturnedFile struct {
+type PolarisFile struct {
     Path string
     ContentLenght int
     Etag string
@@ -61,10 +62,10 @@ type ReturnedFile struct {
 }
 
 type FileOps interface {
-    UploadDir(path string, ch chan *http.Response) (err error)
-    ListFile(path string, ch chan *http.Response) (err error)
-    UploadFile(path string, ch chan *http.Response) (err error)
-    DeleteFile(path string, ch chan *http.Response) (err error)
+    UploadDir(ch chan *http.Response, args... interface{}) (err error)
+    ListFile(ch chan *http.Response, args... interface{}) (err error)
+    UploadFile(ch chan *http.Response, args... interface{}) (err error)
+    DeleteFile(ch chan *http.Response, args... interface{}) (err error)
 }
 
 type MetadataOps interface {
@@ -82,13 +83,13 @@ func (c *PolarisClient) Stat(begin, end time.Time) (err error) {
     }
     if err == nil{
         completed := c.TotalTasks - c.ActiveTasks
-        duration := end.Sub(begin).Nanoseconds()
+        duration := float64(end.Sub(begin).Nanoseconds())
         Parallel := runtime.NumCPU()
 
-        fmt.Println(completed, "Files Uploaded!")
-        c.Logger.Println(completed, "Files Uploaded!")
-        fmt.Printf("Concurrency: %d, Parallel: %d\n", int64(c.TotalTasks)*1E9/duration, Parallel)
-        c.Logger.Printf("Concurrency: %d, Parallel: %d\n", int64(c.TotalTasks)*1E9/duration, Parallel)
+        fmt.Println(completed, "Tasks Completed!")
+        c.Logger.Println(completed, "Tasks Completed!")
+        fmt.Printf("Concurrency: %.6f, Parallel: %d\n", float64(c.TotalTasks)*1E9/duration, Parallel)
+        c.Logger.Printf("Concurrency: %.6f, Parallel: %d\n", float64(c.TotalTasks)*1E9/duration, Parallel)
     }
 
     return 
@@ -116,12 +117,29 @@ func (c *PolarisClient) Info() {
  * @cmd command list to run 
  * @logger the logger fo client
  */
-func (c *PolarisClient)Init(clientId, UserId, token, stVC, mdVC, traceLevel string, cmd *PolarisCommand, logger *log.Logger, tasks int, timeoutCh chan int) (errs []error) {
+func (c *PolarisClient)Init(traceLevel, cmd string, logger *log.Logger, tasks int, timeout int) (errs []error) {
 
     s, t1 := Trace(GetFunctionName(c.Init))
     defer Un(s, t1)
+    
+    userId := os.Getenv("USER_ID")
+    token := os.Getenv("TOKEN")
+    clientId := os.Getenv("CLIENT_ID")
+    stVC := os.Getenv("STORAGE_SVC")
+    mdVC := os.Getenv("MD_SVC")
 
-    *c = PolarisClient{clientId, UserId, token, stVC, mdVC, strings.ToLower(traceLevel), cmd, logger, tasks, 0, timeoutCh}
+    testCmd := new(PolarisCommand)
+    testCmd = &PolarisCommand{cmd, WAITING}
+    timeoutCh := make(chan int)
+    
+    if timeout > 0 {
+        go func(){
+            time.Sleep(time.Duration(timeout) * 1000 * time.Millisecond)
+            timeoutCh <- 1
+        }()
+    }
+
+    *c = PolarisClient{clientId, userId, token, stVC, mdVC, strings.ToLower(traceLevel), testCmd, logger, tasks, 0, timeoutCh}
 
     if c.Logger == nil {
         errs = append(errs, errors.New("logger of client is not set"))
@@ -143,7 +161,7 @@ func (c *PolarisClient)Init(clientId, UserId, token, stVC, mdVC, traceLevel stri
     if c.Command == nil {
         errs = append(errs, errors.New("No commands set!"))
     } else {
-        _, ok := FindElementInArray(Commands, cmd.Command)
+        _, ok := FindElementInArray(Commands, cmd)
         if ok == false {
             errs = append(errs, errors.New("Wrong Command"))
         }
@@ -215,30 +233,26 @@ func CheckHttpResponseStatusCode(resp *http.Response) error {
 		return errors.New("Error: response == 501 not implemented")
 	case 503:
 		return errors.New("Error: response == 503 service unavailable")
+    default:
+        return fmt.Errorf("Error: response == %d %s", resp.StatusCode, resp.Status)
 	}
-	fmt.Println("Error: unexpected response status code: ", resp.StatusCode)
-	log.Fatal("Error: unexpected response status code: ", resp.StatusCode)
-	return errors.New("Error: unexpected response status code")
 }
 
 /**Upload a given directory to storage
  * @dir the directory path to Upload
  * @ch the chan for communication
  */
-func (c *PolarisClient) UploadDir(dir string, ch chan *http.Response ) (err error) {
+func (c *PolarisClient) UploadDir(ch chan *http.Response, args... interface{}) (err error) {
+    dir := args[0].(string)
     fileInfo, err := os.Stat(dir)
-    if err != nil {
-        c.Logger.Fatal(err)
-    }
+    Perr(c.Logger, err, true)
     if fileInfo.IsDir() == false {
         c.Logger.Printf("%s is not a directory", dir)
         os.Exit(1)
     } else {
         walker, err := GetDirAndFileList(dir)
         ch = make(chan *http.Response, len(walker.Files))
-        if err != nil {
-            c.Logger.Fatal(err)
-        }
+        Perr(c.Logger, err,true)
         fmt.Printf("Preapare to upload %d files\n", len(walker.Files))
         c.Logger.Printf("Preapare to upload %d files\n", len(walker.Files))
         
@@ -250,7 +264,7 @@ func (c *PolarisClient) UploadDir(dir string, ch chan *http.Response ) (err erro
         }
         t1 := time.Now()
         for _, filename := range walker.Files {
-            go FileTask(c.UploadFile, filename, ch)
+            go FileTask(c.UploadFile, ch, filename)
         }
 
         t2 := time.Now()
@@ -284,25 +298,24 @@ func (c *PolarisClient) UploadDir(dir string, ch chan *http.Response ) (err erro
  * @param traceLevel the log level
  * @param ch the chan to transit http.Response
  */
- func (c *PolarisClient) UploadFile(path string, ch chan *http.Response) (err error) {
+ func (c *PolarisClient) UploadFile(ch chan *http.Response, args... interface{}) (err error) {
 
      c.ActiveTasks++
      method := "PUT"
+     var path, url string
      var headers map[string]string
      headers = make(map[string]string)
      headers["Authorization"] = "Bearer " + c.Token
      headers["Content-type"] = "text/plain"
 
+     for _, arg := range args {
+         if path, ok := arg.(string); ok {
+             url = c.StorageServiceURL + "/" + c.UserId + "/files/" + filepath.Base(path) + "?previous="
+         }
+     }
      fContent, err := ioutil.ReadFile(path)
-     if err != nil {
-         c.Logger.Fatal(err)
-     }
+     Perr(c.Logger, err, true)
 
-     if err != nil {
-         c.Logger.Fatal(err)
-     }
-
-     url := c.StorageServiceURL + "/" + c.UserId + "/files/" + filepath.Base(path) + "?previous="
 
      c.Logger.Printf("url: %s\nmethod: %s\n", url, method)
      if strings.ToLower(c.TraceLevel) == "debug" {
@@ -313,55 +326,48 @@ func (c *PolarisClient) UploadDir(dir string, ch chan *http.Response ) (err erro
      }
 
      r, err := CallAPI(method, url, &fContent, headers)
-
-     if err != nil {
-         c.Logger.Println(err)
-     }
+     Perr(c.Logger, err, true)
 
      err = CheckHttpResponseStatusCode(r)
-     if err != nil {
-         if 401 == r.StatusCode {
-             fmt.Println(err)
-             c.Logger.Println(err)
-         } else {
-             c.Logger.Println(err)
-         }
-     }
+     Perr(c.Logger, err, true)
      ch <- r
      return
  }
 
-func (c *PolarisClient) DeleteFile(path string, ch chan *http.Response) (err error) {
+func (c *PolarisClient) DeleteFile(ch chan *http.Response, args... interface{}) (err error) {
     return
 }
 
-func (c *PolarisClient) ListFile(path string, ch chan *http.Response)(err error) {
+func (c *PolarisClient) ListFile(ch chan *http.Response, args... interface{})(err error) {
 
     method := "GET"
     var headers map[string]string
     headers = make(map[string]string)
     headers["Authorization"] = "Bearer " + c.Token
-    c.ActiveTasks++
-
+    var limit int
+    var marker string
+    var ok bool
+    
     url := c.StorageServiceURL + "/" + c.UserId + "/files"
-
-    r, err := CallAPI(method, url, nil, headers)
-
-    if err != nil {
-        c.Logger.Println(err)
+    for _, arg := range args {
+        if limit, ok = arg.(int); ok {
+            url = url + "?limit=" + strconv.Itoa(limit)
+        } else if marker, ok = arg.(string); ok {
+            url = url + "&marker=" + marker
+        }
     }
+    c.ActiveTasks++
+    t1 := time.Now()
+    r, err := CallAPI(method, url, nil, headers)
+    t2 := time.Now()
+    c.ActiveTasks--
+    defer c.Stat(t1, t2)
 
+    Perr(c.Logger, err, false)
     err = CheckHttpResponseStatusCode(r)
-     if err != nil {
-         if 401 == r.StatusCode {
-             fmt.Println(err)
-             c.Logger.Println(err)
-         } else {
-             c.Logger.Println(err)
-         }
-     }
+    Perr(c.Logger, err, false)
+    ch <- r
 
-     ch <- r
     return 
 }
 
