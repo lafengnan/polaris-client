@@ -1,14 +1,14 @@
 package utils
 
 import (
-	"fmt"
-	"io"
+    "fmt"
+    "io"
     "os"
-	"log"
-	"net/http"
-	"path/filepath"
-	"reflect"
-	"runtime"
+    "log"
+    "net/http"
+    "path/filepath"
+    "reflect"
+    "runtime"
     "time"
 )
 
@@ -23,6 +23,25 @@ type readCloser struct {
 
 func (readCloser) Close() error {
 	return nil
+}
+
+func Pinfo(logger *log.Logger, format string, args... interface{}) {
+    fmt.Printf(format, args...)
+    if logger != nil {
+        logger.Printf(format, args...)
+    }
+}
+
+func Perr(logger *log.Logger, err error, fatal bool) {
+    if err != nil {
+        fmt.Println(err)
+        if logger != nil {
+            logger.Println(err)
+        }
+        if fatal {
+            os.Exit(1)
+        }
+    }
 }
 
 func Trace(s string, args ...interface{}) (string, time.Time) {
@@ -72,17 +91,15 @@ func NewTask(f interface{}, args... interface{}) (err error) {
  * @url the service uri
  * @ch the chan with *http.Response
  */
-func FileTask(f func(string, chan *http.Response) error, path string, ch chan *http.Response) {
+func FileTask(f func(chan *http.Response, ... interface{}) error, ch chan *http.Response, args... interface{}) {
 
-	s, t1 := Trace(GetFunctionName(f), path)
-	defer Un(s, t1, path)
+	s, t1 := Trace(GetFunctionName(f), args...)
+	defer Un(s, t1, args...)
 
-	err := f(path, ch)
-
-	if err != nil {
-		log.Fatal(err)
-	}
+	err := f(ch, args...)
+    Perr(nil, err, true)
 }
+
 /**Get dirs and files list of a given path
  * @path the file/dir path to analysis
  */
