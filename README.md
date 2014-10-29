@@ -16,7 +16,7 @@ to download goes package for elasticsearch connection usage.
 Build
 -----
 `cd src`  
-`go build main.go`
+`go build -o <excutable_name> main.go`
 
 Functionalities
 ===============
@@ -26,10 +26,10 @@ Done
 1. Upload files with multiple tasks and users
 2. Upload dir with mutiple users (upload dir does not support multiple tasks)
 3. List files with multiple users
+4. Delete files(dir)
 
 TODO
 ----
-1. Delete files(dir)
 2. Index document to ES
 3. Delete document from ES
 4. Create alias to ES
