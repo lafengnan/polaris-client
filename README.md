@@ -33,7 +33,7 @@ TODO
 2. Index document to ES
 3. Delete document from ES
 4. Create alias to ES
-5. etc.
+5. etc
 Known Issues
 ============
 
