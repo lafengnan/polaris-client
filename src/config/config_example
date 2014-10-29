@@ -1,0 +1,7 @@
+{
+    "ClientId":"go-client",
+    "Users":{"userid":"token"},
+    "StorageServiceURL":"storage service url",
+    "MetadataServiceURL":"metadata service url",
+    "TraceLevel":"info"
+}
