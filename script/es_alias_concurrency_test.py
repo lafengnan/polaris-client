@@ -2,6 +2,7 @@
 import gevent
 import logging
 import os
+import sys
 from optparse import OptionParser
 
 from elastic_polaris.index_creation import IndexCreator
@@ -97,4 +98,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
