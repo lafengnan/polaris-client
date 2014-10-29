@@ -25,8 +25,8 @@ Done
 ----
 1. Upload files with multiple tasks and users
 2. Upload dir with mutiple users (upload dir does not support multiple tasks)
-3. List files with multiple users
-4. Delete files(dir)
+3. List files with multiple users (dev branch)
+4. Delete files(dir) (dev branch)
 
 TODO
 ----
