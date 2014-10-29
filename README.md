@@ -38,5 +38,5 @@ TODO
 Known Issues
 ============
 
-1. If task number is lager than 300, pthread_create failure maybe thrown out @ubuntu 12.04 with file discriptor limitaion as **1024**
+1. If task number is larger than 300, pthread_create failure maybe thrown out @ubuntu 12.04 with file discriptor limitation as **1024**
 2. Multiple users support still in dev branch, may be inefficient for real test. So needs enhancement.
