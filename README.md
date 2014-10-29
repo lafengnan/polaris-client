@@ -22,5 +22,5 @@ Build
 Known Issues
 ============
 
-1. If task number is lager than 300, pthread_creat failure maybe thrown out @ubuntu 12.04 with file discriptor as **1024**
+1. If task number is lager than 300, pthread_create failure maybe thrown out @ubuntu 12.04 with file discriptor as **1024**
 2. Multiple users support still in dev branch, may be inefficient for real test. So needs enhancement.
