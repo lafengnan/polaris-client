@@ -20,9 +20,10 @@ import (
 )
 
 var Commands []string  = []string {
+    "ListFiles",
     "UploadFile",
     "DeleteFile",
-    "ListFiles",
+    "DeleteAllFiles",
     "IndexDocument",
     "DeleteDocument",
 }
@@ -322,10 +323,10 @@ func (c *PolarisClient) UploadDir(userch chan string, ch chan *http.Response, us
      }
 
      r, err := CallAPI(method, url, &fContent, headers)
-     Perr(c.Logger, err, true)
+     Perr(c.Logger, err, false)
 
      err = CheckHttpResponseStatusCode(r)
-     Perr(c.Logger, err, true)
+     Perr(c.Logger, err, false)
      ch <- r
      if userch != nil {
          userch <- user
@@ -334,8 +335,26 @@ func (c *PolarisClient) UploadDir(userch chan string, ch chan *http.Response, us
  }
 
 func (c *PolarisClient) DeleteFile(userch chan string, ch chan *http.Response, user, token string, args... interface{}) (err error) {
+    method := "DELETE"
+    var headers map[string]string
+    headers = make(map[string]string)
+
+    headers["Authorization"] = "Bearer " + token
+    url := c.StorageServiceURL + "/" + user + "/files/"
+    // arg[0] pass in the file name to delete
+    if args != nil {
+        if name, ok := args[0].(string); ok {
+            url = url + name
+        }
+    }
+    c.ActiveTasks++
+    r, err := CallAPI(method, url, nil, headers)
+    Perr(c.Logger, err, false)
+    err = CheckHttpResponseStatusCode(r)
+    Perr(c.Logger, err, false)
+    ch <- r
     if userch != nil {
-        userch <- user
+       userch <- user
     }
     return
 }

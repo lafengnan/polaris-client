@@ -4,9 +4,11 @@ import (
     "os"
     "fmt"
     "log"
-    "runtime"
-    "flag"
     "time"
+    "flag"
+    "errors"
+    "runtime"
+    "strings"
     "io/ioutil"
     "net/http"
     "encoding/json"
@@ -16,7 +18,7 @@ import (
 )
 
 var (
-    dirToUpload = flag.String("f", "", "Files/Dircs to upload")
+    file = flag.String("f", "", "Files/Dircs to upload")
     concurrencyNum = flag.Int("n", 1, "Concurrency number")
     logFileName = flag.String("log", "client.log", "log file name" )
     ConfigFile = flag.String("config", "./.config", "config file")
@@ -55,8 +57,8 @@ func main() {
     client := new(utils.PolarisClient)
     totalTasks := 0
 
-    if len(*dirToUpload) != 0 {
-        w, err := utils.GetDirAndFileList(*dirToUpload)
+    if len(*file) != 0  && strings.ToLower(*cmd) == "uploadfile"{
+        w, err := utils.GetDirAndFileList(*file)
         utils.Perr(client.Logger, err, true)
         if len(w.Files) > 0 && *concurrencyNum > 1 {
             log.Fatal("Error config! directory upload and concurrencyNum should not be configure together")
@@ -82,17 +84,51 @@ func main() {
         }
     }
 
-    client.Logger.Printf("log file: %s\n", *logFileName)
-    client.Logger.Printf("timeout : %d seconds\n", *timeout)
+    utils.Pinfo(client.Logger, "%s %s\n", "log files: ", *logFileName)
+    utils.Pinfo(client.Logger, "%s %d %s\n", "timeout :", *timeout, "seconds")
     client.Info()
 
     
     var t1, t2 time.Time
     var taskname string
     userch := make(chan string, len(client.Users))
+    var ch chan *http.Response
     switch client.Command.Command {
+    case "DeleteFile":
+        if len(*file) == 0 {
+            err := errors.New("No source file to delete!")
+            utils.Perr(client.Logger, err, true)
+        }
+        ch = make(chan *http.Response, *concurrencyNum)
+        taskname = utils.GetFunctionName(client.DeleteFile)
+        t1 = time.Now()
+        for u, t := range client.Users {
+            for i := 0; i < *concurrencyNum; i++ {
+                go utils.FileTask(client.DeleteFile, userch, ch, u, t, *file)
+            }
+        }
+        t2 = time.Now()
+        for i := 0; i < len(client.Users); i++ {
+            for j := 0; j < *concurrencyNum; j++ {
+                select {
+                case r := <- ch:
+                    client.ActiveTasks--
+                    fmt.Println(r)
+                    client.Logger.Println(r)
+                }
+            }
+            select {
+            case <- client.Timeout:
+                fmt.Println("Timeout!")
+                client.Logger.Println("Timeout")
+                client.Command.Status = utils.UNKOWN
+                break
+            case u := <- userch:
+                utils.Pinfo(client.Logger, "%s: %s\n", u, "task completed!")    
+            }
+        }
+
     case "ListFiles":
-        var ch chan *http.Response
         ch = make(chan *http.Response, client.TotalTasks)
         taskname = utils.GetFunctionName(client.ListFile)
         t1 = time.Now()
@@ -106,6 +142,7 @@ func main() {
             for j := 0; j < *concurrencyNum; j++ {
                 select {
                 case r := <- ch:
+                    client.ActiveTasks--
                     var flist  []utils.PolarisFile
                     defer r.Body.Close()
                     body, err := ioutil.ReadAll(r.Body)
@@ -123,22 +160,23 @@ func main() {
                 fmt.Println("Timeout!")
                 client.Logger.Println("Timeout!")
                 client.Command.Status = utils.UNKOWN
+                break
             case u := <- userch:
                 utils.Pinfo(client.Logger, "%s: %s", u, "task completed!\n")
             }
         }
     case "UploadFile":
         utils.Pinfo(client.Logger, "%s %s\n", "upload file(s) for", client.Users)
-        utils.Pinfo(client.Logger, "%s %s\n", "files source: ", *dirToUpload)
-        ch := make(chan *http.Response, client.TotalTasks/len(client.Users))
-        fileInfo, err := os.Stat(*dirToUpload)
+        utils.Pinfo(client.Logger, "%s %s\n", "files source: ", *file)
+        ch = make(chan *http.Response, client.TotalTasks/len(client.Users))
+        fileInfo, err := os.Stat(*file)
         utils.Perr(client.Logger, err, true)
         client.Command.Status = utils.RUNNING
         if fileInfo.IsDir() {
             taskname = utils.GetFunctionName(client.UploadDir)
             t1 = time.Now()
             for u, t := range client.Users {
-                go utils.FileTask(client.UploadDir, userch, ch, u, t, *dirToUpload)
+                go utils.FileTask(client.UploadDir, userch, ch, u, t, *file)
             }
             t2 = time.Now()
             for i := 0; i < len(client.Users); i++ {
@@ -157,7 +195,7 @@ func main() {
             t1 = time.Now()
             for u, t := range client.Users {
                 for j := 0; j < *concurrencyNum; j++ {
-                    go utils.FileTask(client.UploadFile, userch, ch, u, t, *dirToUpload)
+                    go utils.FileTask(client.UploadFile, userch, ch, u, t, *file)
                 }
             }
             t2 = time.Now()
