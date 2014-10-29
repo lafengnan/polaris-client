@@ -25,15 +25,15 @@ Done
 ----
 1. Upload files with multiple tasks and users
 2. Upload dir with mutiple users (upload dir does not support multiple tasks)
-3. List files with multiple users
+3. List files with multiple users (dev branch)
+4. Delete files(dir) (dev branch)
 
 TODO
 ----
-1. Delete files(dir)
-2. Index document to ES
-3. Delete document from ES
-4. Create alias to ES
-5. ...
+1. Index document to ES
+2. Delete document from ES
+3. Create alias to ES
+4. ...
 
 Known Issues
 ============
