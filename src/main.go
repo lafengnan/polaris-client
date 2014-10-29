@@ -119,9 +119,8 @@ func main() {
             }
             select {
             case <- client.Timeout:
-                fmt.Println("Timeout!")
-                client.Logger.Println("Timeout")
                 client.Command.Status = utils.UNKOWN
+                utils.Pinfo(client.Logger, "%s\n", "Timeout!")
                 break
             case u := <- userch:
                 utils.Pinfo(client.Logger, "%s: %s\n", u, "task completed!")    
@@ -157,9 +156,8 @@ func main() {
             }
             select {
             case <- client.Timeout:
-                fmt.Println("Timeout!")
-                client.Logger.Println("Timeout!")
                 client.Command.Status = utils.UNKOWN
+                utils.Pinfo(client.Logger, "%s\n", "Timeout!")
                 break
             case u := <- userch:
                 utils.Pinfo(client.Logger, "%s: %s", u, "task completed!\n")
@@ -182,9 +180,8 @@ func main() {
             for i := 0; i < len(client.Users); i++ {
                 select {
                     case <- client.Timeout:
-                        fmt.Println("Timeout!")
-                        client.Logger.Println("Timeout")
                         client.Command.Status = utils.UNKOWN
+                        utils.Pinfo(client.Logger, "%s\n", "Timeout!")
                         break
                     case u := <- userch:
                         utils.Pinfo(client.Logger, "%s: %s", u, "task completed!\n")
@@ -202,9 +199,8 @@ func main() {
             for i := 0; i < client.TotalTasks; i++ {
                 select {
                 case <- client.Timeout:
-                    fmt.Println("Timeout!")
-                    client.Logger.Println("Timeout!")
                     client.Command.Status = utils.UNKOWN
+                    utils.Pinfo(client.Logger, "%s\n", "Timeout!")
                     break
                 case r := <- ch:
                     client.ActiveTasks--

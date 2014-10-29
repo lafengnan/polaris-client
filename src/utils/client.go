@@ -328,8 +328,12 @@ func (c *PolarisClient) UploadDir(userch chan string, ch chan *http.Response, us
      err = CheckHttpResponseStatusCode(r)
      Perr(c.Logger, err, false)
      ch <- r
-     if userch != nil {
-         userch <- user
+
+     if c.Command.Status != UNKOWN {
+         c.Command.Status = DONE
+         if userch != nil {
+             userch  <- user
+         }
      }
      return
  }
@@ -353,8 +357,12 @@ func (c *PolarisClient) DeleteFile(userch chan string, ch chan *http.Response, u
     err = CheckHttpResponseStatusCode(r)
     Perr(c.Logger, err, false)
     ch <- r
-    if userch != nil {
-       userch <- user
+
+    if c.Command.Status != UNKOWN {
+        c.Command.Status = DONE
+        if userch != nil {
+            userch  <- user
+        }
     }
     return
 }
@@ -370,9 +378,8 @@ func (c *PolarisClient) ListFile(userch chan string, ch chan *http.Response, use
 
 
     headers["Authorization"] = "Bearer " + token
-    
-    
     url := c.StorageServiceURL + "/" + user + "/files"
+
     for _, arg := range args {
         if limit, ok = arg.(int); ok {
             url = url + "?limit=" + strconv.Itoa(limit)
@@ -382,15 +389,17 @@ func (c *PolarisClient) ListFile(userch chan string, ch chan *http.Response, use
     }
     c.ActiveTasks++
     r, err := CallAPI(method, url, nil, headers)
-    c.ActiveTasks--
-
     Perr(c.Logger, err, false)
+
     err = CheckHttpResponseStatusCode(r)
     Perr(c.Logger, err, false)
     ch <- r
-    if userch != nil {
 
-        userch <- user
+    if c.Command.Status != UNKOWN {
+        c.Command.Status = DONE
+        if userch != nil {
+            userch  <- user
+        }
     }
 
     return 
