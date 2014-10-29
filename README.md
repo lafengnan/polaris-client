@@ -30,10 +30,10 @@ Done
 
 TODO
 ----
-2. Index document to ES
-3. Delete document from ES
-4. Create alias to ES
-5. ...
+1. Index document to ES
+2. Delete document from ES
+3. Create alias to ES
+4. ...
 
 Known Issues
 ============
