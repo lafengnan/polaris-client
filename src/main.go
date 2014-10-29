@@ -21,7 +21,7 @@ var (
     logFileName = flag.String("log", "client.log", "log file name" )
     ConfigFile = flag.String("config", "./.config", "config file")
     cpuProfile = flag.String("cpuprofile", "", "write profile to file")
-    timeout = flag.Int("t", 0, "timeout value for waiting")
+    timeout = flag.Int("t", 0, "timeout value for waiting(seconds)")
     cmd = flag.String("c", "help", "command to execute")
 )
 
@@ -62,7 +62,7 @@ func main() {
             log.Fatal("Error config! directory upload and concurrencyNum should not be configure together")
         }
         if len(w.Files) > 0 {
-            totalTasks = len(w.Files)
+            totalTasks = len(w.Files) * len(cfg.Users)
         } else {
             totalTasks = *concurrencyNum * len(cfg.Users)
         }
@@ -128,8 +128,9 @@ func main() {
             }
         }
     case "UploadFile":
-        client.Logger.Printf("source directory/file: %s\n", *dirToUpload)
-        ch := make(chan *http.Response, client.TotalTasks)
+        utils.Pinfo(client.Logger, "%s %s\n", "upload file(s) for", client.Users)
+        utils.Pinfo(client.Logger, "%s %s\n", "files source: ", *dirToUpload)
+        ch := make(chan *http.Response, client.TotalTasks/len(client.Users))
         fileInfo, err := os.Stat(*dirToUpload)
         utils.Perr(client.Logger, err, true)
         client.Command.Status = utils.RUNNING

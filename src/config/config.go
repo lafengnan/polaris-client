@@ -44,7 +44,7 @@ func (cfg *PolarisConfig) UpdateConfigFile(path string) {
     if len(path) == 0 {
         path = cfg.Path
     }
-    file, err := os.Open(path)
+    file, err := os.OpenFile(path, os.O_WRONLY, 0666)
     if err != nil {
         fmt.Println(err)
     }
@@ -57,12 +57,15 @@ func (cfg *PolarisConfig) UpdateConfigFile(path string) {
 
     if cfg.ClientId != clientId {
         cfg.ClientId = clientId
-    } else if _, ok := cfg.Users[userId]; ok {
+    } 
+    if _, ok := cfg.Users[userId]; ok {
         fmt.Println(userId, "exisits, Update its token!")
         log.Println(userId, "exisits, Update its token!")
-    } else if cfg.StorageServiceURL != stVC {
+    } 
+    if cfg.StorageServiceURL != stVC {
         cfg.StorageServiceURL = stVC
-    } else if cfg.MetadataServiceURL != mdVC {
+    } 
+    if cfg.MetadataServiceURL != mdVC {
         cfg.MetadataServiceURL = mdVC
     }
     cfg.Users[userId] = token

@@ -258,7 +258,7 @@ func (c *PolarisClient) UploadDir(userch chan string, ch chan *http.Response, us
         }
         t1 := time.Now()
         for _, filename := range walker.Files {
-            go FileTask(c.UploadFile, userch, ch, user, token, filename)
+            go FileTask(c.UploadFile, nil, ch, user, token, filename)
         }
         t2 := time.Now()
         c.Stat(GetFunctionName(c.UploadDir), t1, t2)
@@ -275,13 +275,14 @@ func (c *PolarisClient) UploadDir(userch chan string, ch chan *http.Response, us
                     fmt.Println(r)
                     c.Logger.Println(r)
                 }
-                if i == len(walker.Files) - 1 {
-                    userch  <- user
-                }
+
             }
         }
         if c.Command.Status != UNKOWN {
             c.Command.Status = DONE
+            if userch != nil {
+                userch  <- user
+            }
         }
 
     }
@@ -326,12 +327,16 @@ func (c *PolarisClient) UploadDir(userch chan string, ch chan *http.Response, us
      err = CheckHttpResponseStatusCode(r)
      Perr(c.Logger, err, true)
      ch <- r
-     userch <- user
+     if userch != nil {
+         userch <- user
+     }
      return
  }
 
 func (c *PolarisClient) DeleteFile(userch chan string, ch chan *http.Response, user, token string, args... interface{}) (err error) {
-    userch <- user
+    if userch != nil {
+        userch <- user
+    }
     return
 }
 
@@ -364,7 +369,10 @@ func (c *PolarisClient) ListFile(userch chan string, ch chan *http.Response, use
     err = CheckHttpResponseStatusCode(r)
     Perr(c.Logger, err, false)
     ch <- r
-    userch <- user
+    if userch != nil {
+
+        userch <- user
+    }
 
     return 
 }
