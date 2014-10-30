@@ -15,7 +15,9 @@ to download goes package for elasticsearch connection usage.
 
 Build
 -----
-`cd src`  
+1. Add polaris-client to $GOPATH 
+2. Build
+`cd polaris-client/src`  
 `go build main.go`
 
 Functionalities
