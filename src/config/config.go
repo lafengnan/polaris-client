@@ -55,17 +55,17 @@ func (cfg *PolarisConfig) UpdateConfigFile(path string) {
     stVC := os.Getenv("STORAGE_SVC")
     mdVC := os.Getenv("MD_SVC")
 
-    if cfg.ClientId != clientId {
+    if len(clientId) != 0 && cfg.ClientId != clientId {
         cfg.ClientId = clientId
     } 
     if _, ok := cfg.Users[userId]; ok {
         fmt.Println(userId, "exisits, Update its token!")
         log.Println(userId, "exisits, Update its token!")
     } 
-    if cfg.StorageServiceURL != stVC {
+    if len(stVC) != 0 && cfg.StorageServiceURL != stVC {
         cfg.StorageServiceURL = stVC
     } 
-    if cfg.MetadataServiceURL != mdVC {
+    if len(mdVC) != 0 && cfg.MetadataServiceURL != mdVC {
         cfg.MetadataServiceURL = mdVC
     }
     cfg.Users[userId] = token
