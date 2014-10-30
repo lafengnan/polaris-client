@@ -15,8 +15,11 @@ to download goes package for elasticsearch connection usage.
 
 Build
 -----
-`cd src`  
-`go build -o <excutable_name> main.go`
+1. Add polaris-client to $GOPATH  
+`export $GOPATH=$GOPATH:<project-dir>`
+2. Build  
+`cd polaris-client/src`  
+`go build -o <executable-name> main.go`
 
 Functionalities
 ===============
@@ -38,5 +41,5 @@ TODO
 Known Issues
 ============
 
-1. If task number is lager than 300, pthread_create failure maybe thrown out @ubuntu 12.04 with file discriptor limitaion as **1024**
+1. If task number is larger than 300, pthread_create failure maybe thrown out @ubuntu 12.04 with file discriptor limitation as **1024**
 2. Multiple users support still in dev branch, may be inefficient for real test. So needs enhancement.
