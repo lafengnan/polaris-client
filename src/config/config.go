@@ -68,7 +68,9 @@ func (cfg *PolarisConfig) UpdateConfigFile(path string) {
     if len(mdVC) != 0 && cfg.MetadataServiceURL != mdVC {
         cfg.MetadataServiceURL = mdVC
     }
-    cfg.Users[userId] = token
+    if len(token) != 0 && len(userId) != 0 {
+        cfg.Users[userId] = token
+    }
 
     encoder := json.NewEncoder(file)
     err = encoder.Encode(cfg)
