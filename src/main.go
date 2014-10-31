@@ -90,6 +90,7 @@ func main() {
 
     
     var t1, t2 time.Time
+    var isDeleteAllFiles bool = false
     var taskname string
     userch := make(chan string, len(client.Users))
     var ch chan *http.Response
@@ -126,10 +127,16 @@ func main() {
                 utils.Pinfo(client.Logger, "%s: %s\n", u, "task completed!")    
             }
         }
-
+    case "DeleteAllFiles":
+        isDeleteAllFiles = true
+        taskname = utils.GetFunctionName(client.DeleteAllFiles)
+        fallthrough
     case "ListFiles":
+        var fileList map[string][]string
         ch = make(chan *http.Response, client.TotalTasks)
-        taskname = utils.GetFunctionName(client.ListFile)
+        if isDeleteAllFiles == false {
+            taskname = utils.GetFunctionName(client.ListFile)
+        }
         t1 = time.Now()
         for u, t := range client.Users {
             for i := 0; i < *concurrencyNum; i++ {
@@ -137,7 +144,7 @@ func main() {
             }
         }
         t2 = time.Now()
-        for i := 0; i < len(client.Users); i++ {
+        for user, _ := range client.Users {
             for j := 0; j < *concurrencyNum; j++ {
                 select {
                 case r := <- ch:
@@ -149,7 +156,9 @@ func main() {
                     err = json.Unmarshal(body, &flist) 
                     utils.Perr(client.Logger, err, false)
                     utils.Pinfo(client.Logger, "%d %s\n", len(flist), "files")
+                    fileList = make(map[string][]string, len(flist))
                     for _, f := range flist {
+                        fileList[user] = append(fileList[user], f.Path)
                         utils.Pinfo(client.Logger, "%s %s %s %s\n", f.Path, f.Etag, f.UUID, f.LastModified)
                     }
                 }
@@ -161,6 +170,41 @@ func main() {
                 break
             case u := <- userch:
                 utils.Pinfo(client.Logger, "%s: %s", u, "task completed!\n")
+            }
+        }
+        // Execute DeleteAllFiles Command
+        if isDeleteAllFiles == true {
+            client.TotalTasks = 0
+            for u, _ := range client.Users {
+                client.TotalTasks = client.TotalTasks + len(fileList[u])
+            }
+            ch = make(chan *http.Response, client.TotalTasks)
+            t1 = time.Now()
+            for u, t := range client.Users {
+                for i := 0; i < *concurrencyNum; i++ {
+                    go utils.FileTask(client.DeleteAllFiles, userch, ch, u, t, fileList[u])
+                }
+            }
+            t2 = time.Now()
+            for user, _ := range client.Users {
+                for j := 0; j < len(fileList[user]); j++ {
+                    select {
+                    case r := <- ch:
+                        client.ActiveTasks--
+                        if client.TraceLevel == "debug" {
+                            fmt.Println(r)
+                            client.Logger.Println(r)
+                        }
+                    }
+                }
+                select {
+                case <- client.Timeout:
+                    client.Command.Status = utils.UNKOWN
+                    utils.Pinfo(client.Logger, "%s\n", "Timeout!")
+                    break
+                case u := <- userch:
+                    utils.Pinfo(client.Logger, "%s: %s", u, "task completed!\n")
+                }   
             }
         }
     case "UploadFile":

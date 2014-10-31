@@ -67,6 +67,7 @@ type FileOps interface {
     ListFile(userch chan string, ch chan *http.Response, user, token string, args... interface{}) (err error)
     UploadFile(userch chan string, ch chan *http.Response, user, token string, args... interface{}) (err error)
     DeleteFile(userch chan string, ch chan *http.Response, user, token string, args... interface{}) (err error)
+    DeleteAllFiles(userch chan string, ch chan *http.Response, user, token string, args... interface{}) (err error)
 }
 
 type MetadataOps interface {
@@ -87,7 +88,7 @@ func (c *PolarisClient) Stat(taskname string, begin, end time.Time) (err error) 
         duration := float64(end.Sub(begin).Nanoseconds())
         Parallel := runtime.NumCPU()
 
-        Pinfo(c.Logger, "%s: %d %s\n", taskname, completed, "Tasks Completed!")
+        Pinfo(c.Logger, "%s: %d %s %.9f %s\n", taskname, completed, "Tasks Completed! Elapsed: ", duration/1E9, "seconds")
         fmt.Printf("Concurrency: %.6f, Parallel: %d\n", float64(c.TotalTasks)*1E9/duration, Parallel)
         c.Logger.Printf("Concurrency: %.6f, Parallel: %d\n", float64(c.TotalTasks)*1E9/duration, Parallel)
     }
@@ -298,7 +299,6 @@ func (c *PolarisClient) UploadDir(userch chan string, ch chan *http.Response, us
  */
  func (c *PolarisClient) UploadFile(userch chan string, ch chan *http.Response, user, token string, args... interface{}) (err error) {
 
-     c.ActiveTasks++
      method := "PUT"
      var ok bool = false
      var path, url string
@@ -322,6 +322,7 @@ func (c *PolarisClient) UploadDir(userch chan string, ch chan *http.Response, us
          }
      }
 
+     c.ActiveTasks++
      r, err := CallAPI(method, url, &fContent, headers)
      Perr(c.Logger, err, false)
 
@@ -345,7 +346,7 @@ func (c *PolarisClient) DeleteFile(userch chan string, ch chan *http.Response, u
 
     headers["Authorization"] = "Bearer " + token
     url := c.StorageServiceURL + "/" + user + "/files/"
-    // arg[0] pass in the file name to delete
+    // args[0] pass in the file name to delete
     if args != nil {
         if name, ok := args[0].(string); ok {
             url = url + name
@@ -364,6 +365,40 @@ func (c *PolarisClient) DeleteFile(userch chan string, ch chan *http.Response, u
             userch  <- user
         }
     }
+    return
+}
+
+func(c *PolarisClient) DeleteAllFiles(userch chan string, ch chan *http.Response, user, token string, args... interface{}) (err error) {
+
+    var fileList []string
+    // args[0] pass in the file list to delete
+    if args != nil {
+        if l, ok := args[0].([]string); ok {
+            fileList = l
+        }
+    }
+    t1 := time.Now()
+    for _, f := range fileList {
+        go c.DeleteFile(userch, ch, user, token, strings.TrimPrefix(f, "/"))
+    }
+    t2 := time.Now()
+    c.Stat(GetFunctionName(c.DeleteFile), t1, t2)
+    //for _, _ = range fileList {
+    //    select {
+    //    case <-c.Timeout:
+    //        fmt.Println("Timeout!")
+    //        c.Logger.Println("Timeout!")
+    //        c.Command.Status = UNKOWN
+    //        break
+    //    case r := <-ch:
+    //        c.ActiveTasks--
+    //        if c.TraceLevel == "debug" {
+    //            fmt.Println(r)
+    //            c.Logger.Println(r)
+    //        }
+
+    //    }
+    //}
     return
 }
 
