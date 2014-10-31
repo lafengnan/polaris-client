@@ -236,66 +236,71 @@ func CheckHttpResponseStatusCode(resp *http.Response) error {
 }
 
 /**Upload a given directory to storage
- * @dir the directory path to Upload
- * @ch the chan for communication
+ * @param userch chan for pass user Info
+ * @param ch chan for pass *http.Response
+ * @user user id
+ * @token token for user
+ * @args... variables
  */
-func (c *PolarisClient) UploadDir(userch chan string, ch chan *http.Response, user, token string, args... interface{}) (err error) {
-    dir := args[0].(string)
-    fileInfo, err := os.Stat(dir)
-    Perr(c.Logger, err, true)
-    if fileInfo.IsDir() == false {
-        c.Logger.Printf("%s is not a directory", dir)
-        os.Exit(1)
-    } else {
-        walker, err := GetDirAndFileList(dir)
-        Perr(c.Logger, err,true)
-        fmt.Printf("Preapare to upload %d files\n", len(walker.Files))
-        c.Logger.Printf("Preapare to upload %d files\n", len(walker.Files))
-        
-        if  c.TraceLevel == "debug" {
-            for _, f := range walker.Files {
-                fmt.Println(f)
-                c.Logger.Println(f)
-            }
-        }
-        t1 := time.Now()
-        for _, filename := range walker.Files {
-            go FileTask(c.UploadFile, nil, ch, user, token, filename)
-        }
-        t2 := time.Now()
-        c.Stat(GetFunctionName(c.UploadDir), t1, t2)
-        for i := 0; i < len(walker.Files); i++ {
-            select {
-            case <-c.Timeout:
-                fmt.Println("Timeout!")
-                c.Logger.Println("Timeout!")
-                c.Command.Status = UNKOWN
-                break
-            case r := <-ch:
-                c.ActiveTasks--
-                if c.TraceLevel == "debug" {
-                    fmt.Println(r)
-                    c.Logger.Println(r)
-                }
+ func (c *PolarisClient) UploadDir(userch chan string, ch chan *http.Response, user, token string, args... interface{}) (err error) {
+     dir := args[0].(string)
+     fileInfo, err := os.Stat(dir)
+     Perr(c.Logger, err, true)
+     if fileInfo.IsDir() == false {
+         c.Logger.Printf("%s is not a directory", dir)
+         os.Exit(1)
+     } 
 
-            }
-        }
-        if c.Command.Status != UNKOWN {
-            c.Command.Status = DONE
-            if userch != nil {
-                userch  <- user
-            }
-        }
+     // Upload a directory
+     walker, err := GetDirAndFileList(dir)
+     Perr(c.Logger, err,true)
+     fmt.Printf("Preapare to upload %d files\n", len(walker.Files))
+     c.Logger.Printf("Preapare to upload %d files\n", len(walker.Files))
 
-    }
-    return
+     if  c.TraceLevel == "debug" {
+         for _, f := range walker.Files {
+             fmt.Println(f)
+             c.Logger.Println(f)
+         }
+     }
+     t1 := time.Now()
+     for _, filename := range walker.Files {
+         go FileTask(c.UploadFile, nil, ch, user, token, filename)
+     }
+     t2 := time.Now()
+     c.Stat(GetFunctionName(c.UploadDir), t1, t2)
+     for i := 0; i < len(walker.Files); i++ {
+         select {
+         case <-c.Timeout:
+             fmt.Println("Timeout!")
+             c.Logger.Println("Timeout!")
+             c.Command.Status = UNKOWN
+             break
+         case r := <-ch:
+             c.ActiveTasks--
+             if c.TraceLevel == "debug" {
+                 fmt.Println(r)
+                 c.Logger.Println(r)
+             }
+
+         }
+     }
+     if c.Command.Status != UNKOWN {
+         c.Command.Status = DONE
+         if userch != nil {
+             userch  <- user
+         }
+     }
+
+     return
 }
 
 /**Upload File(s) to polaris storage
- * @param path the file(s) to upload 
- * @param url the API uri
- * @param traceLevel the log level
- * @param ch the chan to transit http.Response
+ * @param userch chan for pass user Info
+ * @param ch chan for pass *http.Response
+ * @user user id
+ * @token token for user
+ * @args... variables
  */
  func (c *PolarisClient) UploadFile(userch chan string, ch chan *http.Response, user, token string, args... interface{}) (err error) {
 
@@ -339,17 +344,30 @@ func (c *PolarisClient) UploadDir(userch chan string, ch chan *http.Response, us
      return
  }
 
+/**Delete a file from Storage
+ * @param userch chan for pass user Info
+ * @param ch chan for pass *http.Response
+ * @user user id
+ * @token token for user
+ * @args... variables [filepath, block?]
+ */
 func (c *PolarisClient) DeleteFile(userch chan string, ch chan *http.Response, user, token string, args... interface{}) (err error) {
+
     method := "DELETE"
     var headers map[string]string
+    var ok, block bool = false, false
     headers = make(map[string]string)
 
     headers["Authorization"] = "Bearer " + token
     url := c.StorageServiceURL + "/" + user + "/files/"
     // args[0] pass in the file name to delete
+    // args[1] pass in the block directive for all files deletion
     if args != nil {
-        if name, ok := args[0].(string); ok {
-            url = url + name
+        if _, ok = args[0].(string); ok {
+            url = url + args[0].(string)
+        }
+        if block, ok = args[1].(bool); ok {
+            block = args[1].(bool)
         }
     }
     c.ActiveTasks++
@@ -361,13 +379,20 @@ func (c *PolarisClient) DeleteFile(userch chan string, ch chan *http.Response, u
 
     if c.Command.Status != UNKOWN {
         c.Command.Status = DONE
-        if userch != nil {
+        if userch != nil && block == false {
             userch  <- user
         }
     }
     return
 }
 
+/**Delete all files of a user from Storage
+ * @param userch chan for pass user Info
+ * @param ch chan for pass *http.Response
+ * @user user id
+ * @token token for user
+ * @args... variables [filelist]
+ */
 func(c *PolarisClient) DeleteAllFiles(userch chan string, ch chan *http.Response, user, token string, args... interface{}) (err error) {
 
     var fileList []string
@@ -379,29 +404,31 @@ func(c *PolarisClient) DeleteAllFiles(userch chan string, ch chan *http.Response
     }
     t1 := time.Now()
     for _, f := range fileList {
-        go c.DeleteFile(userch, ch, user, token, strings.TrimPrefix(f, "/"))
+        go c.DeleteFile(userch, ch, user, token, strings.TrimPrefix(f, "/"), true)
     }
     t2 := time.Now()
     c.Stat(GetFunctionName(c.DeleteFile), t1, t2)
-    //for _, _ = range fileList {
-    //    select {
-    //    case <-c.Timeout:
-    //        fmt.Println("Timeout!")
-    //        c.Logger.Println("Timeout!")
-    //        c.Command.Status = UNKOWN
-    //        break
-    //    case r := <-ch:
-    //        c.ActiveTasks--
-    //        if c.TraceLevel == "debug" {
-    //            fmt.Println(r)
-    //            c.Logger.Println(r)
-    //        }
-
-    //    }
-    //}
+    for j := 0; j < len(fileList); j++ {
+        select {
+        case r := <- ch:
+            c.ActiveTasks--
+            if c.TraceLevel == "debug" {
+                fmt.Println(r)
+                c.Logger.Println(r)
+            }
+        }
+    }
+    userch <- user
     return
 }
 
+/**List all files of a user from Storage
+ * @param userch chan for pass user Info
+ * @param ch chan for pass *http.Response
+ * @user user id
+ * @token token for user
+ * @args... variables
+ */
 func (c *PolarisClient) ListFile(userch chan string, ch chan *http.Response, user, token string, args... interface{})(err error) {
 
     var limit int
@@ -417,7 +444,9 @@ func (c *PolarisClient) ListFile(userch chan string, ch chan *http.Response, use
 
     for _, arg := range args {
         if limit, ok = arg.(int); ok {
-            url = url + "?limit=" + strconv.Itoa(limit)
+            if limit > 0 {
+                url = url + "?limit=" + strconv.Itoa(limit)
+            }
         } else if marker, ok = arg.(string); ok {
             url = url + "&marker=" + marker
         }

@@ -25,6 +25,7 @@ var (
     cpuProfile = flag.String("cpuprofile", "", "write profile to file")
     timeout = flag.Int("t", 0, "timeout value for waiting(seconds)")
     cmd = flag.String("c", "help", "command to execute")
+    limit = flag.Int("limit", 0, "number of files to list once")
 )
 
 
@@ -140,7 +141,7 @@ func main() {
         t1 = time.Now()
         for u, t := range client.Users {
             for i := 0; i < *concurrencyNum; i++ {
-                go utils.FileTask(client.ListFile, userch, ch, u, t, 210)
+                go utils.FileTask(client.ListFile, userch, ch, u, t, *limit)
             }
         }
         t2 = time.Now()
@@ -159,7 +160,9 @@ func main() {
                     fileList = make(map[string][]string, len(flist))
                     for _, f := range flist {
                         fileList[user] = append(fileList[user], f.Path)
-                        utils.Pinfo(client.Logger, "%s %s %s %s\n", f.Path, f.Etag, f.UUID, f.LastModified)
+                        if client.TraceLevel == "debug" {
+                            utils.Pinfo(client.Logger, "%s %s %s %s\n", f.Path, f.Etag, f.UUID, f.LastModified)
+                        }
                     }
                 }
             }
@@ -186,17 +189,7 @@ func main() {
                 }
             }
             t2 = time.Now()
-            for user, _ := range client.Users {
-                for j := 0; j < len(fileList[user]); j++ {
-                    select {
-                    case r := <- ch:
-                        client.ActiveTasks--
-                        if client.TraceLevel == "debug" {
-                            fmt.Println(r)
-                            client.Logger.Println(r)
-                        }
-                    }
-                }
+            for _, _ = range client.Users {
                 select {
                 case <- client.Timeout:
                     client.Command.Status = utils.UNKOWN
