@@ -30,6 +30,7 @@ Done
 2. Upload dir with mutiple users (upload dir does not support multiple tasks)
 3. List files with multiple users (dev branch)
 4. Delete files(dir) (dev branch)
+5. Delete all files in batch mode (dev branch)
 
 TODO
 ----
@@ -41,5 +42,5 @@ TODO
 Known Issues
 ============
 
-1. If task number is larger than 300, pthread_create failure maybe thrown out @ubuntu 12.04 with file discriptor limitation as **1024**
+1. If upload task number is larger than 300, pthread_create failure maybe thrown out @ubuntu 12.04 with file discriptor limitation as **1024**
 2. Multiple users support still in dev branch, may be inefficient for real test. So needs enhancement.
