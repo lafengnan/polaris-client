@@ -16,7 +16,7 @@ to download goes package for elasticsearch connection usage.
 Build
 -----
 1. Add polaris-client to $GOPATH  
-`export $GOPATH=$GOPATH:<project-dir>`
+`export GOPATH=$GOPATH:<project-dir>`
 2. Build  
 `cd polaris-client/src`  
 `go build -o <executable-name> main.go`
