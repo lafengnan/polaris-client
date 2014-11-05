@@ -106,7 +106,7 @@ func main() {
         t1 = time.Now()
         for u, t := range client.Users {
             for i := 0; i < *concurrencyNum; i++ {
-                go utils.FileTask(client.DeleteFile, userch, ch, u, t, *file)
+                go utils.FileTask(client.DeleteFile, userch, ch, u, t, *file, false)
             }
         }
         t2 = time.Now()

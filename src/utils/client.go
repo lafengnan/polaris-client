@@ -407,7 +407,7 @@ func(c *PolarisClient) DeleteAllFiles(userch chan string, ch chan *http.Response
         go c.DeleteFile(userch, ch, user, token, strings.TrimPrefix(f, "/"), true)
     }
     t2 := time.Now()
-    c.Stat(GetFunctionName(c.DeleteFile), t1, t2)
+    defer c.Stat(GetFunctionName(c.DeleteFile), t1, t2)
     for j := 0; j < len(fileList); j++ {
         select {
         case r := <- ch:
