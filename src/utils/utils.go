@@ -52,8 +52,8 @@ func Trace(s string, args ...interface{}) (string, time.Time) {
 
 func Un(s string, startTime time.Time, args ...interface{}) {
 	endTime := time.Now()
-	log.Println("Task Ending:", endTime, s, args, "ElapsedTime: ", endTime.Sub(startTime))
-	fmt.Println("Task Ending:", endTime, s, args, "ElapsedTime: ", endTime.Sub(startTime))
+	log.Println("Task Ending:", endTime, s, args, "ElapsedTime: ", endTime.Sub(startTime), "\n")
+	fmt.Println("Task Ending:", endTime, s, args, "ElapsedTime: ", endTime.Sub(startTime), "\n")
 }
 
 func GetFunctionName(i interface{}) string {
@@ -91,12 +91,11 @@ func NewTask(f interface{}, args... interface{}) (err error) {
  * @url the service uri
  * @ch the chan with *http.Response
  */
-func FileTask(f func(chan *http.Response, ... interface{}) error, ch chan *http.Response, args... interface{}) {
+func FileTask(f func(chan string, chan *http.Response, string, string, ... interface{}) error, userch chan string, ch chan *http.Response, user, token string, args... interface{}) {
 
 	s, t1 := Trace(GetFunctionName(f), args...)
 	defer Un(s, t1, args...)
-
-	err := f(ch, args...)
+	err := f(userch, ch, user, token, args...)
     Perr(nil, err, true)
 }
 
